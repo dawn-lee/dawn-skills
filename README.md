@@ -51,14 +51,22 @@ export DASHSCOPE_BASE_URL="https://dashscope.aliyuncs.com/api/v1/"
 
 ### Step 3: 安装
 
-clone本项目后，在AI Agent的对话框，指定安装对应的skill，以wan2.7-video-skill为例：
+以安装 **wan2.7-video-skill** 为例，提供两种安装方式：
 
-clone本项目
+**方式一：npx 一键安装（推荐）**
+
+```bash
+npx skills add https://github.com/dawn-lee/dawn-skills --skill wan2.7-video-skill
+```
+
+**方式二：手动 clone 安装**
+
+clone 本项目：
 ```bash
 git clone https://github.com/dawn-lee/dawn-skills.git
 ```
 
-在AI Agent对话框指定skill路径进行安装，其中`/path/to/`是用户本地真实路径地址。
+在 AI Agent 对话框指定 skill 路径进行安装，其中`/path/to/`是用户本地真实路径地址：
 
 ```
 安装这个目录下的skill  /path/to/dawn-skills/skills/wan2.7-video-skill
