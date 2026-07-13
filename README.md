@@ -9,6 +9,7 @@
 | 技能 | 描述 | 脚本 | 参考 |
 |------|------|------|------|
 | **wan2.7-video-skill** | 基于wan2.7视频生成模型，支持文生视频、图生视频和视频续写 | `video_generation.py` `check_video_task_status.py` `file_to_oss.py` | `common.md` `video-generation.md` `prompt-guide.md` |
+| **dev-log** | 开发日志记录，跟踪 AI 辅助开发的会话改动并写入 DEVELOPMENT_LOG.md | - | - |
 
 将持续更新多种技能到技能列表。
 
@@ -79,6 +80,8 @@ dawn-skills/
 ├── .gitignore
 ├── README.md
 └── skills
+    ├── dev-log                                 # 开发日志记录技能
+    │   └── SKILL.md                            # 技能描述文件
     └── wan2.7-video-skill                      # wan2.7视频生成技能
         ├── references
         │   ├── common.md                       # 通用配置文档
