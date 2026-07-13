@@ -1,8 +1,9 @@
-﻿# dawn-skills 
-> 基于Wan的AI Agent Skills —— 让你的 AI Agent 轻松调用 Wan 的 AIGC 能力。 
+# dawn-skills 
+> 面向 AI Agent 的技能包（Skills）集合 -- 涵盖视频生成、开发日志、数据同步等能力。 
 ---
 ## 🌟 核心能力
-**dawn-skills** 是一组面向 AI Agent 的技能包（Skills），通过调用API接口的方式赋予 AI Agent 相关 AIGC 能力。
+
+**dawn-skills** 是一组面向 AI Agent 的技能包（Skills），通过调用脚本或 API 接口的方式赋予 AI Agent 视频生成、开发日志记录、数据同步等能力。
 
 **技能列表**
 
@@ -18,40 +19,7 @@
 
 ## 🚀 快速开始
 
-### Step 1: 获取 API Key
-
-**前提条件：** 需要阿里云账号
-
-1. **注册阿里云账号**
-   - 访问 https://www.aliyun.com/
-   - 完成账号注册和实名认证
-
-2. **开通百炼服务**
-   - 访问 https://bailian.console.aliyun.com/
-   - 开通百炼服务
-
-3. **创建 API Key**
-   - 进入百炼控制台 → API-KEY管理
-   - 创建新的 API Key
-
-### Step 2: 配置环境变量
-
-```bash
-export DASHSCOPE_API_KEY="your-access-key"
-```
-
-**地域选择**
-
-根据所在地域选择合适的`DASHSCOPE_BASE_URL`
-```bash
-# 中国大陆（北京）- 默认
-export DASHSCOPE_BASE_URL="https://dashscope.aliyuncs.com/api/v1/"
-
-# 新加坡（取消注释使用）
-# export DASHSCOPE_BASE_URL="https://dashscope-intl.aliyuncs.com/api/v1/"
-```
-
-### Step 3: 安装
+### 安装技能
 
 以安装 **wan2.7-video-skill** 为例，提供两种安装方式：
 
@@ -72,6 +40,41 @@ git clone https://github.com/dawn-lee/dawn-skills.git
 
 ```
 安装这个目录下的skill  /path/to/dawn-skills/skills/wan2.7-video-skill
+```
+
+> 安装 **dev-log** 或 **db-sync** 时，将上述命令/路径中的 `wan2.7-video-skill` 替换为对应技能名即可，二者无需 API Key。
+
+### 配置 wan2.7-video-skill（需要 API Key）
+
+**前提条件：** 需要阿里云账号
+
+1. **注册阿里云账号**
+   - 访问 https://www.aliyun.com/
+   - 完成账号注册和实名认证
+
+2. **开通百炼服务**
+   - 访问 https://bailian.console.aliyun.com/
+   - 开通百炼服务
+
+3. **创建 API Key**
+   - 进入百炼控制台 -> API-KEY管理
+   - 创建新的 API Key
+
+配置环境变量：
+
+```bash
+export DASHSCOPE_API_KEY="your-access-key"
+```
+
+**地域选择**
+
+根据所在地域选择合适的`DASHSCOPE_BASE_URL`
+```bash
+# 中国大陆（北京）- 默认
+export DASHSCOPE_BASE_URL="https://dashscope.aliyuncs.com/api/v1/"
+
+# 新加坡（取消注释使用）
+# export DASHSCOPE_BASE_URL="https://dashscope-intl.aliyuncs.com/api/v1/"
 ```
 
 ## 📂 项目结构
