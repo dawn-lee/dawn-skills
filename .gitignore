@@ -4,3 +4,5 @@ __pycache__/
 *.tmp
 .DS_Store
 Thumbs.db
+# 设计文档留档不入库（按需手动维护）
+docs/
