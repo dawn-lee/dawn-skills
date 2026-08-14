@@ -1,9 +1,9 @@
 # dawn-skills 
-> 面向 AI Agent 的技能包（Skills）集合 -- 涵盖视频生成、开发日志、数据同步等能力。 
+> 面向 AI Agent 的技能包（Skills）集合 -- 涵盖视频生成、开发日志、数据同步、网页爬取等能力。 
 ---
 ## 🌟 核心能力
 
-**dawn-skills** 是一组面向 AI Agent 的技能包（Skills），通过调用脚本或 API 接口的方式赋予 AI Agent 视频生成、开发日志记录、数据同步等能力。
+**dawn-skills** 是一组面向 AI Agent 的技能包（Skills），通过调用脚本或 API 接口的方式赋予 AI Agent 视频生成、开发日志记录、数据同步、网页爬取与数据提取等能力。
 
 **技能列表**
 
@@ -13,6 +13,7 @@
 | **dev-log** | 开发日志记录：读写双通道，写入靠 git 真值 + 脚本编号，读取靠头部主题索引，把 DEVELOPMENT_LOG.md 变成 LLM 可追溯的项目记忆库 | `dev-log.mjs` | - |
 | **db-sync** | 在数据库之间同步表数据，读取 DataGrip 配置自动发现数据源 | `db-sync.sh` | - |
 | **obsidian-inbox** | Obsidian 知识库沉淀：把会话中可复用的知识写进笔记库（自动 frontmatter、按 cwd 路由、写前查重），并提供检索通道；另含每日定时归档，把当天会话精炼成笔记落库。代码不含机器相关路径，换电脑跑一次 `init.mjs` + `install.mjs` 即可 | `note.mjs` `sediment.mjs` `init.mjs` `install.mjs` | - |
+| **crawl4ai** | 网页爬取与数据提取：基于 Crawl4AI，支持 JS 渲染页面、批量并发爬取、Markdown 提取、schema 生成式结构化提取（免 LLM） | `basic_crawler.py` `batch_crawler.py` `extraction_pipeline.py` | `complete-sdk-reference.md` |
 
 将持续更新多种技能到技能列表。
 
@@ -43,7 +44,21 @@ git clone https://github.com/dawn-lee/dawn-skills.git
 安装这个目录下的skill  /path/to/dawn-skills/skills/wan2.7-video-skill
 ```
 
-> 安装 **dev-log** 或 **db-sync** 时，将上述命令/路径中的 `wan2.7-video-skill` 替换为对应技能名即可，二者无需 API Key。
+> 安装 **dev-log**、**db-sync**、**crawl4ai** 或 **obsidian-inbox** 时，将上述命令/路径中的 `wan2.7-video-skill` 替换为对应技能名即可，均无需 API Key（obsidian-inbox 另需一次本机初始化，见下）。
+
+### 配置 crawl4ai（需要 Python 环境）
+
+**前提条件：** 本机已安装 Python 3.10+
+
+```bash
+pip install crawl4ai
+# 校验安装
+crawl4ai-doctor
+# 首次使用前初始化（下载浏览器内核等）
+crawl4ai-setup
+```
+
+无需配置环境变量或 API Key。若使用 `extraction_pipeline.py` 的 LLM 提取模式，才需要额外配置对应的 LLM Provider Key。
 
 ### 配置 obsidian-inbox（需要一次本机初始化）
 
@@ -101,6 +116,15 @@ dawn-skills/
 ├── .gitignore
 ├── README.md
 └── skills
+    ├── crawl4ai                                 # 网页爬取与数据提取技能
+    │   ├── references
+    │   │   └── complete-sdk-reference.md        # 完整 SDK 参考文档
+    │   ├── scripts
+    │   │   ├── basic_crawler.py                 # 基础爬取（Markdown + 截图）
+    │   │   ├── batch_crawler.py                 # 批量 URL 并发爬取
+    │   │   └── extraction_pipeline.py           # 数据提取流水线（schema 生成/复用）
+    │   ├── tests                                # 测试用例
+    │   └── SKILL.md                             # 技能描述文件
     ├── db-sync                                 # 数据库表同步技能
     │   └── scripts
     │       └── db-sync.sh                      # 同步脚本

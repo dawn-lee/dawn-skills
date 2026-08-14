@@ -6,6 +6,7 @@ __pycache__/
 Thumbs.db
 # 设计文档留档不入库（按需手动维护）
 docs/
+.history
 
 # 技能的本机配置：含家目录/知识库/私有目录名等信息，由 scripts/init.mjs 在本机生成
 # （仓库只保留 config.example.json 模板）
