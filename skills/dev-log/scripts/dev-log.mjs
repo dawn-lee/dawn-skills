@@ -301,7 +301,11 @@ function cmdIndex(opts) {
   for (const e of entries) {
     const tags = e.theme ? e.theme.split(/[,，]/).map((s) => s.trim()).filter(Boolean) : [];
     if (tags.length) {
-      for (const t of tags) bump(groups, t, e.num);
+      for (const t of tags) {
+        // 幂等：该主题下已存在此编号则跳过，避免重复运行 index 时把同一条目累加成 #N×2
+        // （新条目编号唯一，不会误伤同号多条；旧数据同号多条的无主题条目走下方 seenNums 分支保持原计数）
+        if (!(groups[t] && groups[t][e.num])) bump(groups, t, e.num);
+      }
     } else if (!seenNums.has(e.num)) {
       bump(groups, inferTheme(e.files), e.num);
     }
