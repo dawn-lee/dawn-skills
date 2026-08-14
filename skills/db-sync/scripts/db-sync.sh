@@ -237,7 +237,7 @@ mysql_load() {
 
 # mysqldump
 dump() {
-  if [[ "$BACKEND" == "local" ]]; then mysqldump "$@"; else docker exec "$DOCKER_CONTAINER" mysyldump "$@"; fi
+  if [[ "$BACKEND" == "local" ]]; then mysqldump "$@"; else docker exec "$DOCKER_CONTAINER" mysqldump "$@"; fi
 }
 
 # ============================================================
