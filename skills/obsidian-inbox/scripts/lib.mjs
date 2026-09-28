@@ -137,6 +137,13 @@ function isKnownNested(cfg, rel) {
   return true;
 }
 
+/** domainNotes 登记的主题目录（直接子级）：dawn/pop、dawn/知识库 这类不镜像 projects/ 的目录。 */
+function themeDirs(cfg, parent) {
+  return Object.keys(cfg.domainNotes ?? {})
+    .filter((k) => k.startsWith(`${parent}/`) && !k.slice(parent.length + 1).includes('/'))
+    .map((k) => k.slice(parent.length + 1));
+}
+
 function assertKnownCatalogEntry(cfg, rel, source) {
   const parts = normalizeRel(rel).split('/').filter(Boolean);
   for (let i = 1; i < parts.length; i++) {
@@ -145,10 +152,13 @@ function assertKnownCatalogEntry(cfg, rel, source) {
     const entries = catalogEntries(cfg, parent);
     if (!entries.length) continue; // 父级无清单（如 dawn 下的自由子目录），不校验
     if (entries.includes(child)) continue;
+    // 主题目录与项目清单并存（dawn/pop、dawn/知识库 不在 projects/dawn 下），domainNotes 已登记则放行
+    if ((cfg.domainNotes ?? {})[`${parent}/${child}`]) continue;
     const label = parent === 'work' ? '业务域' : parent === 'work/arch' ? 'arch 子项目' : `${parent} 的子项`;
+    const sanctioned = [...new Set([...entries, ...themeDirs(cfg, parent)])].sort();
     throw new Error(
       `${parent}/${child} 不是已知的${label}（来源：${source}）；`
-      + `现有：${entries.map((e) => `${parent}/${e}`).join('、')}`,
+      + `现有：${sanctioned.map((e) => `${parent}/${e}`).join('、')}`,
     );
   }
 }
@@ -180,7 +190,7 @@ export function assertNoteDir(cfg, relDir, source) {
     if ((cfg.catalogSources ?? {})[head]) assertKnownCatalogEntry(cfg, rel, source);
     return rel;
   }
-  const entries = catalogEntries(cfg, rel);
+  const entries = [...new Set([...catalogEntries(cfg, rel), ...themeDirs(cfg, rel)])].sort();
   const hint = entries.length
     ? `应为：${entries.map((d) => `${rel}/${d}`).join('、')}`
     : (listSubdirs(cfg, rel).length

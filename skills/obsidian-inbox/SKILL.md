@@ -102,7 +102,7 @@ node scripts/note.mjs route --cwd "$PWD"
 
 > **源码目录 ≠ 归属**：下载第三方源码做调研时，归属跟随调研主题；只有确认是"内部业务调研"才例外归业务域（如 agentscope-java → `work/arch`）。遇到未登记的新仓库，问用户后补一条路由。
 
-**代码会拦截**：`note.mjs new` 落点为容器根（`dawn`/`work`/`opensource`）时报错并列出可选目录；`work/<不存在的域>`、`work/arch/<不存在的子项目>`、`opensource/<不存在的仓库>` 同样报错并列出真实清单（清单实时读 `projects/` 下的目录，新增自动生效）。`route` 命令会打印目录含义与 `⚠` 提示。
+**代码会拦截**：`note.mjs new` 落点为容器根（`dawn`/`work`/`opensource`）时报错并列出可选目录；`work/<不存在的域>`、`work/arch/<不存在的子项目>`、`opensource/<不存在的仓库>`、`dawn/<既不在 `projects/dawn` 也未登记在 `domainNotes` 的目录>` 同样报错并列出真实清单（清单实时读 `projects/` 下的目录，新增自动生效；`dawn` 的主题目录 `pop`/`docker`/`知识库` 以 `domainNotes` 登记为准，与项目清单并存校验）。`route` 命令会打印目录含义与 `⚠` 提示。
 
 **归档不走领域目录**：会话归档统一落在**顶层** `dsh-sessions/`，避免容器被原始素材污染；会话归属（`dawn/pop`、`work/service`、`opensource/mcp`…）记在归档笔记 frontmatter 的 `domain` 字段里，可用它筛选/建 Dataview 视图。
 
