@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×13
-- dev-log: #1×14
-- obsidian-inbox: #2×13
-- skill 开发: #1×14, #2×13
+- 知识库: #2×14
+- dev-log: #1×15
+- obsidian-inbox: #2×14
+- skill 开发: #1×15, #2×14
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -127,6 +127,12 @@ skill 开发, obsidian-inbox, 知识库
 **改动文件**：
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, transcriptDigest 代码围栏整段保留不截断（clipSmart）、turnOutline 摘要围栏不成对时自动回退 transcript、LLM 提示词新增第 8 条代码块必须逐字完整保留`
 - `skills/obsidian-inbox/SKILL.md - 修改, 归档流程补代码块保留规则与踩坑说明`
+
+### （续）续记：归档支持 --force 整篇覆盖重写；修复 dev-log 空壳归档并回源核 transcript
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/sediment.mjs - 修改, writeNote：--force 时整篇覆盖重写（原来文件存在就无条件追加，force 也留下旧内容）`
+- `skills/obsidian-inbox/SKILL.md - 修改, 补充 --force=整篇覆盖重写语义`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：
