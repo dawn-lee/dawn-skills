@@ -204,12 +204,21 @@ function substanceOf(s) {
 
 // ---------------------------------------------------------------- transcript 兜底
 
-/** 在 ~/.dsh/sessions/<slug>/ 下定位某会话的原始记录。 */
+/** 在 ~/.dsh/sessions/<slug>/ 下定位某会话的原始记录（文件名可能是 session.jsonl.zstd 或带版本的 session.v3/v4.jsonl.zstd）。 */
 function findTranscript(sid) {
   try {
     for (const slug of readdirSync(SESSIONS_ROOT)) {
-      const p = join(SESSIONS_ROOT, slug, sid, 'session.jsonl.zstd');
-      if (existsSync(p)) return p;
+      const dir = join(SESSIONS_ROOT, slug, sid);
+      let cands = [];
+      try { cands = readdirSync(dir).filter((f) => f.endsWith('.jsonl.zstd')); } catch { continue; }
+      if (!cands.length) continue;
+      // 取最新写入的版本文件
+      let best = null, bestM = -1;
+      for (const f of cands) {
+        const st = statSyncSafe(join(dir, f));
+        if (st && st.mtimeMs > bestM) { best = f; bestM = st.mtimeMs; }
+      }
+      if (best) return join(dir, best);
     }
   } catch { /* 无原始记录目录 */ }
   return null;
