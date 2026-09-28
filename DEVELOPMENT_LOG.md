@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×15
-- dev-log: #1×16
-- obsidian-inbox: #2×15
-- skill 开发: #1×16, #2×15
+- 知识库: #2×16
+- dev-log: #1×17
+- obsidian-inbox: #2×16
+- skill 开发: #1×17, #2×16
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -140,6 +140,11 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/SKILL.md - 修改, 修正第二个 ## D. 为 ## E.（边界），归档流程第 5 步 --force 说明括号错位清理`
 - `知识库 dawn/知识库/DSH 会话知识自动沉淀到 Obsidian 的方案.md - 重写, 同步当前实现（work/arch/<子项目> 嵌套、transcript 兜底、代码块整段保留、--force 覆盖、提炼三归宿、DEVELOPMENT_LOG 续记数 6→13），移除过时历史代码转储`
 - `全局 ~/.dsh/AGENTS.md - 修改, 落位规则补 work/arch/<子项目> 嵌套，会话归档段补提炼循环（三种归宿）`
+
+### （续）续记：补全段结构规范化与围栏感知复核（知识库内容，仓库无代码改动）
+
+**改动文件**：
+- `知识库 Obsidian Vault（不在本仓库）- 修改, work/arch/app/内部业务系统接口与提交查询.md 整篇重写（多轮补 SQL 把精炼 SQL 弄到代码块补全标题下，重写为干净的精炼版并吸收独有内容、删迭代重复转储）；work/arch/app/上线监控报错排查.md 补全块重编号 1-14（两轮补全各自从 1 编号）；其余 4 篇（DSH 预设/AgentScope/Jar/输入法）经围栏感知复核确认结构正常`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：
