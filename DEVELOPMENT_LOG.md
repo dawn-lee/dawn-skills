@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×16
-- dev-log: #1×17
-- obsidian-inbox: #2×16
-- skill 开发: #1×17, #2×16
+- 知识库: #2×17
+- dev-log: #1×18
+- obsidian-inbox: #2×17
+- skill 开发: #1×18, #2×17
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -145,6 +145,13 @@ skill 开发, obsidian-inbox, 知识库
 
 **改动文件**：
 - `知识库 Obsidian Vault（不在本仓库）- 修改, work/arch/app/内部业务系统接口与提交查询.md 整篇重写（多轮补 SQL 把精炼 SQL 弄到代码块补全标题下，重写为干净的精炼版并吸收独有内容、删迭代重复转储）；work/arch/app/上线监控报错排查.md 补全块重编号 1-14（两轮补全各自从 1 编号）；其余 4 篇（DSH 预设/AgentScope/Jar/输入法）经围栏感知复核确认结构正常`
+
+### （续）续记：dawn 容器按项目分目录（dawn/<项目> 镜像 projects/dawn），dawn/知识库不再堆项目知识
+
+**改动文件**：
+- `skills/obsidian-inbox/config.json - 修改, routes 增加 projects/dawn/<项目> → dawn/{1}（置于容器兜底之前），domainNotes 补 dawn/dawn-skills 并改写 dawn/dawn/dawn/知识库 说明`
+- `skills/obsidian-inbox/SKILL.md - 修改, 目录约定加项目目录概念（dawn/<项目> 镜像 projects/dawn）与 dawn/dawn-skills 行，路由表拆分 projects/dawn/<项目> 与容器兜底`
+- `全局 ~/.dsh/AGENTS.md - 修改, 落位规则补 dawn 下一级=主题目录或项目目录`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：

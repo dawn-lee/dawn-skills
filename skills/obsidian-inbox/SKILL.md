@@ -74,17 +74,18 @@ node scripts/note.mjs route --cwd "$PWD"
 
 | 目录 | 含义 |
 |---|---|
-| `dawn/` | **个人资料容器**：根下不放笔记，必须落到下一级主题子目录 |
+| `dawn/` | **个人资料容器**：根下不放笔记，必须落到下一级；下一级 = **主题目录**（`pop` 系统 / `docker` 容器 / `知识库` 通用 AI 工具链知识）+ **项目目录**（`dawn/<项目>`，镜像 `~/Documents/projects/dawn/` 下的项目，如 `dawn/dawn-skills`） |
 | `dawn/pop` | 系统相关（Pop!_OS 桌面、输入法、显示、电源、硬件） |
 | `dawn/docker` | 个人 docker / 容器相关项目文档 |
-| `dawn/知识库` | 个人知识库 / AI 工具链自动化（Obsidian、DSH 配置） |
+| `dawn/知识库` | 跨项目的通用 AI 工具链知识（DSH 工具用法、Obsidian 用法等）——**具体项目知识不要堆这里**，放 `dawn/<项目>` |
+| `dawn/dawn-skills` | dawn-skills 项目（DSH 技能库：obsidian-inbox / dev-log / db-sync 等） |
 | `work/` | **工作资料容器**：第二级**必须是业务域**，域名取自 `~/Documents/projects/work/` 的子目录 |
 | `work/<域>` | 现有域：`arch`、`service`、`ops`、`work-skills`、`utils`、`workspace`；域内可直接放笔记，可再按项目细分 |
 | `opensource/` | **第三方开源项目容器**：既不属于业务也不属于个人；第二级**必须是仓库名**，取自 `~/Documents/projects/opensource/` 的子目录 |
 | `opensource/<仓库>` | 现有：`forks`、`mcp`、`skills`（`agentscope-java` 例外，见下）；仓库内可直接放笔记 |
 | `dsh-sessions/` | **顶层归档区**（跨领域原始素材，sediment 专用，不属于任何容器） |
 
-判定顺序：先在已有目录里找匹配（`pop` 管系统、`docker` 管容器、`work/<域>` 管业务域、`work/arch/<子项目>` 管 arch 下的具体项目、`opensource/<仓库>` 管开源项目）→ 都不匹配才**按主题新建**（如 `dawn/性能调优`）→ 实在拿不准就问用户，**不要往容器根写**。
+判定顺序：先在已有目录里找匹配（`pop` 管系统、`docker` 管容器、`dawn/<项目>` 管个人项目、`work/<域>` 管业务域、`work/arch/<子项目>` 管 arch 下的具体项目、`opensource/<仓库>` 管开源项目、`知识库` 管通用工具知识）→ 都不匹配才**按主题新建**（如 `dawn/性能调优`）→ 实在拿不准就问用户，**不要往容器根写**。
 
 `--dir` 缺省时按会话 cwd 自动路由（见 `config.json` 的 `routes`，第一条匹配生效，支持 `{1}` 捕获组）：
 
@@ -96,7 +97,8 @@ node scripts/note.mjs route --cwd "$PWD"
 | `projects/opensource/agentscope-java/**` | `work/arch` ← **例外**：它是为内部调研任务下载的源码，归属跟随调研主题 |
 | `projects/opensource/<仓库>/**` | `opensource/<仓库>`（含 `forks`，个人 fork 也归开源容器） |
 | `projects/opensource` 本身 | `opensource`（容器根） |
-| `projects/dawn/**` 与兜底 | `dawn` |
+| `projects/dawn/<项目>/**` | `dawn/<项目>`（镜像 projects/dawn 子目录，如 dawn-skills / docker / clash-verge-rev） |
+| `projects/dawn` 本身与兜底 | `dawn`（容器根） |
 
 > **源码目录 ≠ 归属**：下载第三方源码做调研时，归属跟随调研主题；只有确认是"内部业务调研"才例外归业务域（如 agentscope-java → `work/arch`）。遇到未登记的新仓库，问用户后补一条路由。
 
