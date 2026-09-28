@@ -287,31 +287,38 @@ function rawNote(s, digest) {
 
 // ---------------------------------------------------------------- 写入
 
+/**
+ * 会话归档统一落在知识库**顶层**的 archiveDir（跨领域的原始素材区），
+ * 不跟着领域目录走：这样 `dawn/` 与 `work/` 保持纯领域结构。
+ * 会话归属的领域（dawn/pop、work/service…）记进 frontmatter 的 domain 字段。
+ */
 function writeNote(cfg, s, note, prev, args) {
   const dateStr = fmtTime(s.lastPromptAt, false);
   const explicitDir = typeof args.dir === 'string' ? args.dir : null;
-  const dirRel = routeDir(cfg, s.cwd, explicitDir);
+  const domain = routeDir(cfg, s.cwd, explicitDir);
   let notePath = prev?.notePath && existsSync(vaultAbs(cfg, prev.notePath)) ? prev.notePath : null;
   if (!notePath) {
-    const sub = cfg.sessionSubdir ? `${cfg.sessionSubdir}/` : '';
-    notePath = normalizeRel(`${dirRel ? `${dirRel}/` : ''}${sub}${dateStr} ${slugify(note.title)}.md`);
+    const dir = cfg.archiveDir ? `${normalizeRel(cfg.archiveDir)}/` : '';
+    notePath = normalizeRel(`${dir}${dateStr} ${slugify(note.title)}.md`);
   }
   const absPath = vaultAbs(cfg, notePath);
   const exists = existsSync(absPath);
 
   if (exists) {
     appendSection(absPath, `${dateStr} 追加`, note.body);
-    return { status: 'appended', notePath };
+    return { status: 'appended', notePath, domain };
   }
 
   const meta = [
     '> [!info] 会话归档',
-    `> \`${s.id}\` ｜ ${fmtTime(s.createdAt)} → ${fmtTime(s.lastPromptAt)} ｜ ${s.model || '未知模型'} ｜ \`${s.cwd}\``,
+    `> \`${s.id}\` ｜ ${fmtTime(s.createdAt)} → ${fmtTime(s.lastPromptAt)} ｜ ${s.model || '未知模型'}`
+    + ` ｜ 领域 \`${domain || '(未归类)'}\` ｜ \`${s.cwd}\``,
   ].join('\n');
   const fm = buildFrontmatter({
     type: 'session',
     source: 'dsh',
     session: s.id,
+    domain: domain || undefined,
     project: basename(s.cwd || ''),
     cwd: s.cwd,
     model: s.model || undefined,
@@ -320,7 +327,7 @@ function writeNote(cfg, s, note, prev, args) {
     tags: ['dsh/归档', ...note.tags.filter((t) => t !== 'dsh/归档')],
   });
   atomicWrite(absPath, `${fm}\n\n# ${note.title}\n\n${meta}\n\n${note.body}\n`);
-  return { status: 'created', notePath };
+  return { status: 'created', notePath, domain };
 }
 
 // ---------------------------------------------------------------- 主流程
@@ -376,13 +383,13 @@ for (const s of candidates) {
   if (!quiet) log(`${isUpdate ? '补记' : '归档'} ${s.id} (${s.title || '未命名'}, ${turnCount} 轮, ${digest.length} 字)`);
 
   if (dryRun) {
-    const dirRel = routeDir(cfg, s.cwd, typeof args.dir === 'string' ? args.dir : null);
+    const domain = routeDir(cfg, s.cwd, typeof args.dir === 'string' ? args.dir : null);
     const planned = normalizeRel(
-      `${dirRel ? `${dirRel}/` : ''}${cfg.sessionSubdir ? `${cfg.sessionSubdir}/` : ''}`
+      `${cfg.archiveDir ? `${normalizeRel(cfg.archiveDir)}/` : ''}`
       + `${fmtTime(s.lastPromptAt, false)} ${slugify(s.title || '未命名')}.md`,
     );
     result.created.push({
-      id: s.id, title: s.title, notePath: planned, turns: turnCount,
+      id: s.id, title: s.title, notePath: planned, domain, turns: turnCount,
       digestChars: digest.length, preview: digest.slice(0, 160),
     });
     continue;

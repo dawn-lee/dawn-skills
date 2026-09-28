@@ -72,22 +72,25 @@ node scripts/note.mjs route --cwd "$PWD"
 
 | 目录 | 含义 |
 |---|---|
-| `dawn/` | **个人资料容器**：根下**不放笔记**，必须落到下一级子目录 |
+| `dawn/` | **个人资料容器**：根下**不放笔记**，必须落到下一级主题子目录 |
 | `dawn/pop` | 系统相关（Pop!_OS 桌面、输入法、显示、电源、硬件） |
 | `dawn/docker` | 个人 docker / 容器相关项目文档 |
-| `dawn/dsh-sessions` | 会话自动归档（原始素材，由 sediment 写） |
-| `work/` | **工作资料容器**：根下同样不放笔记 |
-| `work/arch` | 业务 arch 相关资料 |
+| `dawn/知识库` | 个人知识库 / AI 工具链自动化（Obsidian、DSH 配置） |
+| `work/` | **工作资料容器**：第二级**必须是业务域**，域名取自 `~/Documents/projects/work/` 的子目录 |
+| `work/<域>` | 现有域：`arch`、`service`、`ops`、`work-skills`、`utils`、`workspace`；域内可直接放笔记，可再按项目细分 |
+| `dsh-sessions/` | **顶层归档区**（跨领域原始素材，sediment 专用，不属于任何领域） |
 
-判定顺序：**先在已有子目录里找匹配**（`pop` 管系统、`docker` 管容器、`arch` 管业务 arch）→ 都不匹配才**按主题新建一个子目录**（如 `dawn/性能调优`）→ 实在拿不准就问用户，**不要往容器根写**。
+判定顺序：先在已有目录里找匹配（`pop` 管系统、`docker` 管容器、`work/<域>` 管业务域）→ 都不匹配才**按主题新建**（如 `dawn/性能调优`）→ 实在拿不准就问用户，**不要往容器根写**。
 
-`--dir` 缺省时按会话 cwd 自动路由（见 `config.json` 的 `routes`，第一条匹配生效）：`projects/work/arch/**` → `work/arch`，其它 `work` 相关 → `work`，`projects/dawn/**` → `dawn`，其余 → `dawn`。
+`--dir` 缺省时按会话 cwd 自动路由（见 `config.json` 的 `routes`，第一条匹配生效，支持 `{1}` 捕获组）：`projects/work/<域>/**` → `work/<域>`，`projects/work` 本身 → `work`，`projects/opensource/forks/**` → `dawn`，其余 `opensource/**` → `work`，`projects/dawn/**` 与兜底 → `dawn`。
 
-**代码会拦截**：`note.mjs new` 的落点若正好是领域容器根（`dawn` / `work`），直接报错并列出可选子目录（exit 2）；`route` 命令也会用 `⚠` 提示。归档笔记不受影响——它落在 `<领域>/dsh-sessions/` 下。
+**代码会拦截**：`note.mjs new` 落点为容器根（`dawn`/`work`）时报错并列出可选目录；`work/<不存在的域>` 也会报错并列出真实域清单（域清单实时读 `~/Documents/projects/work/`，新增域自动生效）。`route` 命令会打印目录含义与 `⚠` 提示。
+
+**归档不走领域目录**：会话归档统一落在**顶层** `dsh-sessions/`，避免 `dawn/`、`work/` 被原始素材污染；会话归属的领域（`dawn/pop`、`work/service`…）记在归档笔记 frontmatter 的 `domain` 字段里，可用它筛选/建 Dataview 视图。
 
 ### 笔记格式
 
-`new` 会自动生成 frontmatter（`type / source / session / project / cwd / date / updated / tags`），正文由你写，按内容取舍下面这些小节：
+`new` 会自动生成 frontmatter（`type / source / session / domain / project / cwd / date / updated / tags`），正文由你写，按内容取舍下面这些小节：
 
 ```markdown
 ## 背景
@@ -121,7 +124,7 @@ node scripts/note.mjs route --cwd "$PWD"
 
 1. 扫描 `~/.dsh/storages/session_projcache/sessions/*.json`，取时间窗内有活动的会话（含 `turnOutline` 的每轮问答，不需要解压 transcript）；
 2. 拼成摘要喂给 `dsh headless` 精炼（挂 [patch/headless-notes-only.yml](patch/headless-notes-only.yml)，**禁掉全部工具**，防止会话里夹带的外部内容触发注入）；
-3. 有价值就写成 `笔记库/<领域>/dsh-sessions/YYYY-MM-DD <标题>.md`；模型判断没价值则输出 `SKIP` 跳过；
+3. 有价值就写成 `dsh-sessions/YYYY-MM-DD <标题>.md`（知识库顶层归档区），领域记在 frontmatter 的 `domain`；模型判断没价值则输出 `SKIP` 跳过；
 4. 状态写在 `~/.local/state/obsidian-inbox/archived.json`（按会话记录已归档轮次），同一会话后续新增的轮次会**追加补记**而不是重复建档。
 
 手动用法：

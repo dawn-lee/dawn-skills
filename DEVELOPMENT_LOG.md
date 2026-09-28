@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×3
-- dev-log: #1×4
-- obsidian-inbox: #2×3
-- skill 开发: #1×4, #2×3
+- 知识库: #2×4
+- dev-log: #1×5
+- obsidian-inbox: #2×4
+- skill 开发: #1×5, #2×4
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -57,6 +57,14 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/note.mjs - 修改, new 校验落点、route 输目录含义与容器告警、stdout EPIPE 兜底`
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, stdout EPIPE 兜底`
 - `skills/obsidian-inbox/SKILL.md - 修改, 新增「目录约定」小节（dawn/work 为容器 + 各子目录含义 + 判定顺序）`
+
+### （续）续记：归档迁到知识库顶层 dsh-sessions，业务域按 projects/work 动态划分
+
+**改动文件**：
+- `skills/obsidian-inbox/config.json - 修改, 新增 archiveDir（顶层归档区）与 companyDomainSource；work 路由改为捕获组动态落位 work/{1}，补全各业务域说明`
+- `skills/obsidian-inbox/scripts/lib.mjs - 修改, routeDir 支持 {n} 捕获组、新增 companyDomains()（实时读 projects/work）与 assertKnownCompanyDomain()、assertNoteDir 提示改为业务域清单`
+- `skills/obsidian-inbox/scripts/note.mjs - 修改, route 输出目录含义/业务域清单/容器告警`
+- `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 归档路径改为顶层 archiveDir，领域写进 frontmatter 的 domain 字段与 callout`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：

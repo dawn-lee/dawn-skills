@@ -36,7 +36,7 @@ export function loadConfig() {
   const cfg = { ...raw };
   cfg.vault = resolve(expandHome(cfg.vault));
   cfg.defaultDir = cfg.defaultDir || 'dawn';
-  cfg.sessionSubdir = cfg.sessionSubdir ?? 'dsh-sessions';
+  cfg.archiveDir = cfg.archiveDir ?? 'dsh-sessions';
   cfg.routes = Array.isArray(cfg.routes) ? cfg.routes : [];
   cfg.searchExclude = cfg.searchExclude || ['.obsidian', '.trash', '.smart-env', '.git'];
   cfg.excludeCwdPrefixes = cfg.excludeCwdPrefixes || [];
@@ -86,16 +86,43 @@ export function toVaultRel(cfg, p, { allowOutside = false } = {}) {
   return normalizeRel(decoded);
 }
 
-/** 显式 --dir > cwd 正则路由 > defaultDir；返回 vault 相对目录（可能是 ''）。 */
+/** 显式 --dir > cwd 正则路由 > defaultDir；返回 vault 相对目录（可能是 ''）。
+ *  路由的 dir 支持 `{1}`、`{2}` 占位，取正则捕获组（用于 `work/<域>` 这类动态落位）。 */
 export function routeDir(cfg, cwd, explicitDir) {
   if (explicitDir && explicitDir !== true) return toVaultRel(cfg, explicitDir);
   const c = cwd ? resolve(expandHome(String(cwd))) : '';
   for (const r of cfg.routes) {
     let re;
     try { re = new RegExp(r.pattern); } catch { continue; }
-    if (c && re.test(c)) return normalizeRel(r.dir);
+    const m = c ? re.exec(c) : null;
+    if (!m) continue;
+    return normalizeRel(String(r.dir ?? '').replace(/\{(\d+)\}/g, (_, i) => m[Number(i)] ?? ''));
   }
   return normalizeRel(cfg.defaultDir);
+}
+
+/** 业务域清单：直接读 companyDomainSource 下的子目录，不写死，新增域自动生效。 */
+export function companyDomains(cfg) {
+  if (!cfg.companyDomainSource) return [];
+  try {
+    return readdirSync(expandHome(cfg.companyDomainSource), { withFileTypes: true })
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+      .map((e) => e.name)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+function assertKnownCompanyDomain(cfg, rel, source) {
+  const domains = companyDomains(cfg);
+  if (!domains.length) return;
+  const seg = rel.split('/')[1];
+  if (domains.includes(seg)) return;
+  throw new Error(
+    `work/${seg} 不是已知的业务域（来源：${source}）；`
+    + `现有业务域：${domains.map((d) => `work/${d}`).join('、')}`,
+  );
 }
 
 /** 列出某目录下已有的子目录（报错提示与路由展示用）。 */
@@ -112,17 +139,24 @@ export function listSubdirs(cfg, relDir) {
 }
 
 /**
- * 领域根（dawn / work）只作容器，笔记必须落到下一级子目录。
+ * 领域根（dawn / work）只作容器，笔记必须落到下一级：
+ * - `dawn` 下按主题建子目录；`work` 下第二级必须是真实存在的业务域。
  * 直接往容器根写，领域目录会被零散笔记淹没，也没法按主题检索。
  */
 export function assertNoteDir(cfg, relDir, source) {
   const rel = normalizeRel(relDir);
-  if (!cfg.domainRoots.includes(rel)) return rel;
+  if (!cfg.domainRoots.includes(rel)) {
+    if (rel.startsWith('work/')) assertKnownCompanyDomain(cfg, rel, source);
+    return rel;
+  }
   const subs = listSubdirs(cfg, rel);
-  const hint = subs.length
-    ? `现有子目录：${subs.join('、')}`
-    : '该领域还没有子目录，请先按主题建一个（如 dawn/pop、dawn/docker、work/arch）';
-  throw new Error(`${rel} 是领域容器，不能直接把笔记放在根下（来源：${source}）；请指定下一级子目录。${hint}`);
+  const domains = companyDomains(cfg);
+  const hint = rel === 'work' && domains.length
+    ? `业务域应为：${domains.map((d) => `work/${d}`).join('、')}`
+    : (subs.length
+      ? `现有子目录：${subs.join('、')}`
+      : '该领域还没有子目录，请先按主题建一个（如 dawn/pop、dawn/docker）');
+  throw new Error(`${rel} 是领域容器，不能直接把笔记放在根下（来源：${source}）；请指定下一级。${hint}`);
 }
 
 const ILLEGAL_FS = /[\\/:*?"<>|#^[\]]/g;

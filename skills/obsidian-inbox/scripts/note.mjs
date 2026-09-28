@@ -17,7 +17,7 @@ import { basename, join, relative, sep } from 'node:path';
 import {
   loadConfig, routeDir, slugify, buildFrontmatter, atomicWrite, readNote,
   searchNotes, findExistingByTitle, appendSection, vaultAbs, fmtTime, parseArgs,
-  readBodyArg, normalizeRel, assertNoteDir, listSubdirs,
+  readBodyArg, normalizeRel, assertNoteDir, listSubdirs, companyDomains,
 } from './lib.mjs';
 
 // 下游提前关管道（如 `| head -1`）时安静退出，不要抛 EPIPE 栈
@@ -158,14 +158,20 @@ function cmdRoute() {
   const dir = routeDir(cfg, typeof args.cwd === 'string' ? args.cwd : process.cwd(), args.dir);
   const isContainer = cfg.domainRoots.includes(dir);
   const subdirs = listSubdirs(cfg, dir);
+  const domains = companyDomains(cfg);
+  const suggestions = dir === 'work' && domains.length
+    ? domains.map((d) => `work/${d}`)
+    : subdirs;
   if (json) {
     process.stdout.write(`${JSON.stringify({
-      ok: true, dir, isContainer, meaning: cfg.domainNotes[dir], subdirs, vault: cfg.vault,
+      ok: true, dir, isContainer, meaning: cfg.domainNotes[dir], subdirs,
+      companyDomains: dir === 'work' ? domains : undefined, vault: cfg.vault,
     }, null, 2)}\n`);
     return;
   }
   process.stdout.write(`${dir}\n`);
+  if (cfg.domainNotes[dir]) process.stdout.write(`  ${cfg.domainNotes[dir]}\n`);
   if (isContainer) {
-    process.stdout.write(`⚠ ${dir} 是领域容器，笔记必须放下一级子目录${subdirs.length ? `：${subdirs.join('、')}` : ''}\n`);
+    process.stdout.write(`⚠ ${dir} 是领域容器，笔记必须落到下一级${suggestions.length ? `：${suggestions.join('、')}` : ''}\n`);
   }
 }
