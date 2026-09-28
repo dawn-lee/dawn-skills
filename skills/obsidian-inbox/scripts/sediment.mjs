@@ -67,6 +67,7 @@ const PROMPT_TEMPLATE = `你是 Obsidian 知识库的整理助手。下面是一
 5. 标签用中文或英文名词，2-5 个，用逗号分隔，放在 HTML 注释里（如上）。
 6. 全文使用简体中文；保留具体数值与路径，删掉寒暄和过程性废话。
 7. 只针对本次摘要中出现的内容，不要编造、不要补充你自己的推测。
+8. **代码块必须原样完整保留**：摘要里出现的代码、命令、SQL、配置文件，一律放进 \`\`\` 代码块**逐字复制**，禁止概括、禁止截断、禁止改成伪代码、禁止"省略号省略"。宁可正文少写，也要保住代码块。拿不准这是代码时也按代码处理。
 
 会话摘要如下：
 <<<DSH_DIGEST_BEGIN>>>
@@ -227,9 +228,24 @@ function findTranscript(sid) {
 /**
  * 老会话可能没有 turnOutline 投影（投影功能是后加的），此时回退读原始
  * transcript：抽 user/message 与 assistant/message 的 text（跳过 reasoning 省 token）。
+ * 规则：**代码围栏整段保留、不按字数截断**（代码是复用价值最高的部分），散文才裁剪。
  * 返回 { digest, chars, turns }；找不到记录或没有文本则返回 null。
  */
-function transcriptDigest(sid, budget = 22000) {
+function clipSmart(text, proseMax) {
+  const t = String(text ?? '').trim();
+  if (!t) return '';
+  // 含代码围栏：围栏块整段保留，只裁剪围栏外的散文
+  if (t.includes('```')) {
+    const parts = t.split(/(```.*?```)/s);
+    return parts
+      .map((p) => (p.trim().startsWith('```') ? p : p.slice(0, proseMax)))
+      .join('')
+      .trim();
+  }
+  return t.slice(0, proseMax);
+}
+
+function transcriptDigest(sid, budget = 30000) {
   const tr = findTranscript(sid);
   if (!tr) return null;
   const res = spawnSync('zstd', ['-dc', tr], { encoding: 'utf8', maxBuffer: 96 * 1024 * 1024 });
@@ -247,7 +263,10 @@ function transcriptDigest(sid, budget = 22000) {
     } else if (e.type === 'assistant/message') {
       const parts = e.data?.message?.content ?? [];
       const txt = parts.filter((x) => x?.type === 'text').map((x) => x.text ?? '').join('\n').trim();
-      if (txt) { out.push(`【助手】${txt.slice(0, 1400)}`); chars += txt.length; turns += 1; }
+      if (txt) {
+        const smart = clipSmart(txt, 1400);
+        if (smart) { out.push(`【助手】${smart}`); chars += smart.length; turns += 1; }
+      }
     }
   }
   if (!out.length) return null;
@@ -536,13 +555,20 @@ for (const s of candidates) {
 
   processed += 1;
   let digest, turnCount;
-  const useTranscript = Boolean(tr && tr.chars > outlineChars);
+  let useTranscript = Boolean(tr && tr.chars > outlineChars);
+  if (!useTranscript && s.turns?.length) {
+    ({ digest, turns: turnCount } = buildDigest(s, cfg, fromTurn, inventory));
+    // 围栏不成对 = turnOutline 预览在代码块中间被切断 → 回退原始 transcript
+    const fences = (String(digest).match(/```/g) || []).length;
+    if (fences % 2 === 1) {
+      const tr2 = tr || transcriptDigest(s.id);
+      if (tr2 && tr2.chars > outlineChars) { tr = tr2; useTranscript = true; }
+    }
+  }
   if (useTranscript) {
     turnCount = tr.turns;
     digest = `${tr.digest}\n\n---\n知识库根目录：${cfg.vault}\n知识库现有笔记（引用时写 [[笔记名]]）：\n${inventory || '（未构建）'}`;
     if (!quiet) log(`  （${s.id} turnOutline 不完整，已改用原始 transcript 生成摘要）`);
-  } else if (s.turns?.length) {
-    ({ digest, turns: turnCount } = buildDigest(s, cfg, fromTurn, inventory));
   }
   if (!digest) {
     result.skipped.push({ id: s.id, reason: 'no-source', chars });

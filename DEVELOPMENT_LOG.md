@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×12
-- dev-log: #1×13
-- obsidian-inbox: #2×12
-- skill 开发: #1×13, #2×12
+- 知识库: #2×13
+- dev-log: #1×14
+- obsidian-inbox: #2×13
+- skill 开发: #1×14, #2×13
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -121,6 +121,12 @@ skill 开发, obsidian-inbox, 知识库
 
 **改动文件**：
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, findTranscript 改为匹配目录内所有 *.jsonl.zstd 并按 mtime 取最新（修复带版本号 session.v3/v4.jsonl.zstd 认不出的缺陷）`
+
+### （续）续记：修复代码块被截断丢失的管道缺陷，并回源补全 8 篇历史归档缺失的代码块
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/sediment.mjs - 修改, transcriptDigest 代码围栏整段保留不截断（clipSmart）、turnOutline 摘要围栏不成对时自动回退 transcript、LLM 提示词新增第 8 条代码块必须逐字完整保留`
+- `skills/obsidian-inbox/SKILL.md - 修改, 归档流程补代码块保留规则与踩坑说明`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：

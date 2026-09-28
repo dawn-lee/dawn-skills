@@ -176,7 +176,7 @@ ask_user_question("这条笔记放哪？",
 `scripts/sediment.mjs` 每天 23:00 由 systemd user timer 触发（见 `~/.config/systemd/user/dsh-sediment.timer`）：
 
 1. 扫描 `~/.dsh/storages/session_projcache/sessions/*.json`，取时间窗内有活动的会话；
-2. 拼摘要：优先用 `turnOutline`（每轮问答预览）；**老会话的投影可能为空或预览截断得极小**，此时自动回退解压 `~/.dsh/sessions/<slug>/<sid>/session.jsonl.zstd`，抽 `user/message` + `assistant/message` 的 text（跳过 reasoning）重建摘要，避免老会话被误判成"没内容"而漏归档；
+2. 拼摘要：优先用 `turnOutline`（每轮问答预览）；**老会话的投影可能为空或预览截断得极小**，此时自动回退解压 `~/.dsh/sessions/<slug>/<sid>/session.jsonl.zstd`，抽 `user/message` + `assistant/message` 的 text（跳过 reasoning）重建摘要，避免老会话被误判成"没内容"而漏归档。**代码块必须整段保留**：transcript 摘要里含代码围栏的段落不按字数截断（只裁围栏外的散文）；turnOutline 摘要若围栏不成对（=在代码中间被切），自动回退读原始 transcript；LLM 提示词明确要求代码/命令/SQL **逐字完整复制**，禁止概括与截断（踩过坑：SQL 曾因截断从知识库丢失）。
 3. 拼成摘要喂给 `dsh headless` 精炼（挂 [patch/headless-notes-only.yml](patch/headless-notes-only.yml)，**禁掉全部工具**，防止会话里夹带的外部内容触发注入）；
 4. 有价值就写成 `dsh-sessions/YYYY-MM-DD <标题>.md`（知识库顶层归档区），领域记在 frontmatter 的 `domain`（如 `work/arch/app`）；模型判断没价值则输出 `SKIP` 跳过；
 5. 状态写在 `~/.local/state/obsidian-inbox/archived.json`（按会话记录已归档轮次），同一会话后续新增的轮次会**追加补记**而不是重复建档；
