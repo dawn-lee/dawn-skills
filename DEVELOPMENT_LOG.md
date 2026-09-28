@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×2
-- dev-log: #1×3
-- obsidian-inbox: #2×2
-- skill 开发: #1×3, #2×2
+- 知识库: #2×3
+- dev-log: #1×4
+- obsidian-inbox: #2×3
+- skill 开发: #1×4, #2×3
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -48,6 +48,15 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/lib.mjs - 修改, 新增 toVaultRel/safeDecode 路径解析防护、listNoteIndex 笔记清单、sanitizeBodyLinks 链接降级；vaultAbs/routeDir 拒绝库外绝对路径`
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 摘要附「知识库现有笔记」清单、引用规范写进 prompt、写入前统一 sanitizeBodyLinks`
 - `skills/obsidian-inbox/SKILL.md - 修改, 新增「引用与链接规范」小节与自动兜底说明`
+
+### （续）续记：按用户定义的知识库目录语义细化路由，并禁止把笔记直接写进领域容器根
+
+**改动文件**：
+- `skills/obsidian-inbox/config.json - 修改, 新增 domainRoots/domainNotes 语义表，细化路由（work/arch 单独映射、opensource/forks → dawn），删除被覆盖的死规则`
+- `skills/obsidian-inbox/scripts/lib.mjs - 修改, 新增 assertNoteDir（领域容器根拦截）与 listSubdirs，loadConfig 解析 domainRoots/domainNotes`
+- `skills/obsidian-inbox/scripts/note.mjs - 修改, new 校验落点、route 输目录含义与容器告警、stdout EPIPE 兜底`
+- `skills/obsidian-inbox/scripts/sediment.mjs - 修改, stdout EPIPE 兜底`
+- `skills/obsidian-inbox/SKILL.md - 修改, 新增「目录约定」小节（dawn/work 为容器 + 各子目录含义 + 判定顺序）`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：

@@ -40,6 +40,8 @@ export function loadConfig() {
   cfg.routes = Array.isArray(cfg.routes) ? cfg.routes : [];
   cfg.searchExclude = cfg.searchExclude || ['.obsidian', '.trash', '.smart-env', '.git'];
   cfg.excludeCwdPrefixes = cfg.excludeCwdPrefixes || [];
+  cfg.domainRoots = (cfg.domainRoots || []).map((r) => normalizeRel(r));
+  cfg.domainNotes = cfg.domainNotes || {};
   if (!existsSync(cfg.vault)) throw new Error(`vault 不存在：${cfg.vault}`);
   return cfg;
 }
@@ -94,6 +96,33 @@ export function routeDir(cfg, cwd, explicitDir) {
     if (c && re.test(c)) return normalizeRel(r.dir);
   }
   return normalizeRel(cfg.defaultDir);
+}
+
+/** 列出某目录下已有的子目录（报错提示与路由展示用）。 */
+export function listSubdirs(cfg, relDir) {
+  const abs = join(cfg.vault, normalizeRel(relDir));
+  try {
+    return readdirSync(abs, { withFileTypes: true })
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+      .map((e) => `${normalizeRel(relDir)}/${e.name}`)
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 领域根（dawn / work）只作容器，笔记必须落到下一级子目录。
+ * 直接往容器根写，领域目录会被零散笔记淹没，也没法按主题检索。
+ */
+export function assertNoteDir(cfg, relDir, source) {
+  const rel = normalizeRel(relDir);
+  if (!cfg.domainRoots.includes(rel)) return rel;
+  const subs = listSubdirs(cfg, rel);
+  const hint = subs.length
+    ? `现有子目录：${subs.join('、')}`
+    : '该领域还没有子目录，请先按主题建一个（如 dawn/pop、dawn/docker、work/arch）';
+  throw new Error(`${rel} 是领域容器，不能直接把笔记放在根下（来源：${source}）；请指定下一级子目录。${hint}`);
 }
 
 const ILLEGAL_FS = /[\\/:*?"<>|#^[\]]/g;

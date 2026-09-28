@@ -17,8 +17,11 @@ import { basename, join, relative, sep } from 'node:path';
 import {
   loadConfig, routeDir, slugify, buildFrontmatter, atomicWrite, readNote,
   searchNotes, findExistingByTitle, appendSection, vaultAbs, fmtTime, parseArgs,
-  readBodyArg, normalizeRel,
+  readBodyArg, normalizeRel, assertNoteDir, listSubdirs,
 } from './lib.mjs';
+
+// 下游提前关管道（如 `| head -1`）时安静退出，不要抛 EPIPE 栈
+process.stdout.on('error', (err) => { if (err?.code === 'EPIPE') process.exit(0); });
 
 const USAGE = `用法：
   note.mjs new --title T [--dir D] [--type TYPE] [--tags a,b] [--cwd P] [--session ID] [--date-prefix] [--append|--force] [--body-file -] [--json]
@@ -68,7 +71,11 @@ function cmdNew() {
   if (typeof args.title !== 'string' || !args.title.trim()) fail(2, 'new 需要 --title');
   const title = args.title.trim();
   const slug = slugify(title);
-  const dirRel = routeDir(cfg, typeof args.cwd === 'string' ? args.cwd : process.cwd(), args.dir);
+  const dirRel = assertNoteDir(
+    cfg,
+    routeDir(cfg, typeof args.cwd === 'string' ? args.cwd : process.cwd(), args.dir),
+    typeof args.dir === 'string' ? `--dir ${args.dir}` : '按 cwd 路由',
+  );
   const prefix = args['date-prefix'] === true ? `${todayStr()} ` : '';
   const relPath = normalizeRel([dirRel, `${prefix}${slug}.md`].filter(Boolean).join('/'));
   const absPath = vaultAbs(cfg, relPath);
@@ -149,6 +156,16 @@ function cmdShow() {
 
 function cmdRoute() {
   const dir = routeDir(cfg, typeof args.cwd === 'string' ? args.cwd : process.cwd(), args.dir);
-  if (json) process.stdout.write(`${JSON.stringify({ ok: true, dir, vault: cfg.vault }, null, 2)}\n`);
-  else process.stdout.write(`${dir}\n`);
+  const isContainer = cfg.domainRoots.includes(dir);
+  const subdirs = listSubdirs(cfg, dir);
+  if (json) {
+    process.stdout.write(`${JSON.stringify({
+      ok: true, dir, isContainer, meaning: cfg.domainNotes[dir], subdirs, vault: cfg.vault,
+    }, null, 2)}\n`);
+    return;
+  }
+  process.stdout.write(`${dir}\n`);
+  if (isContainer) {
+    process.stdout.write(`⚠ ${dir} 是领域容器，笔记必须放下一级子目录${subdirs.length ? `：${subdirs.join('、')}` : ''}\n`);
+  }
 }

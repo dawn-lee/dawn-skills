@@ -24,6 +24,8 @@ import {
 } from './lib.mjs';
 
 const HOME = homedir();
+// 下游提前关管道（如 `| head`）时安静退出，不要抛 EPIPE 栈
+process.stdout.on('error', (err) => { if (err?.code === 'EPIPE') process.exit(0); });
 const PROJCACHE_DIR = join(HOME, '.dsh/storages/session_projcache/sessions');
 const STATE_PATH = join(STATE_DIR, 'archived.json');
 const LOG_PATH = join(STATE_DIR, 'sediment.log');

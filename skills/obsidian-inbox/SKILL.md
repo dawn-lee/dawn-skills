@@ -68,7 +68,22 @@ node scripts/note.mjs route --cwd "$PWD"
 
 **退出码 3 = 目标笔记已存在**，此时输出里会带 `similar` 列表；改成 `append`，或用 `--force` 明确覆盖。
 
-`--dir` 缺省时按 cwd 自动路由（见 `config.json` 的 `routes`）：`~/Documents/{projects/,}work/**` → `work/`，其余 → `dawn/`。路由不符合预期就用 `--dir` 显式指定，并把规则补进 `config.json`。
+### 目录约定（放错位置等于白写）
+
+| 目录 | 含义 |
+|---|---|
+| `dawn/` | **个人资料容器**：根下**不放笔记**，必须落到下一级子目录 |
+| `dawn/pop` | 系统相关（Pop!_OS 桌面、输入法、显示、电源、硬件） |
+| `dawn/docker` | 个人 docker / 容器相关项目文档 |
+| `dawn/dsh-sessions` | 会话自动归档（原始素材，由 sediment 写） |
+| `work/` | **工作资料容器**：根下同样不放笔记 |
+| `work/arch` | 业务 arch 相关资料 |
+
+判定顺序：**先在已有子目录里找匹配**（`pop` 管系统、`docker` 管容器、`arch` 管业务 arch）→ 都不匹配才**按主题新建一个子目录**（如 `dawn/性能调优`）→ 实在拿不准就问用户，**不要往容器根写**。
+
+`--dir` 缺省时按会话 cwd 自动路由（见 `config.json` 的 `routes`，第一条匹配生效）：`projects/work/arch/**` → `work/arch`，其它 `work` 相关 → `work`，`projects/dawn/**` → `dawn`，其余 → `dawn`。
+
+**代码会拦截**：`note.mjs new` 的落点若正好是领域容器根（`dawn` / `work`），直接报错并列出可选子目录（exit 2）；`route` 命令也会用 `⚠` 提示。归档笔记不受影响——它落在 `<领域>/dsh-sessions/` 下。
 
 ### 笔记格式
 
