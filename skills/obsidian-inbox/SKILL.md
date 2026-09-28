@@ -185,6 +185,7 @@ ask_user_question("这条笔记放哪？",
 6. **每次归档后自动重建入口页** `dsh-sessions/索引.md`（日期 / 领域 / 链接 / 会话 id 一览表 + 领域分布统计），`--reindex` 可单独重建。
 
 > ⚠ `sediment.mjs` 有 isMain 守卫，`import()` 只加载定义、**不执行**主流程（此前误 import 触发过全量归档，已修）。
+> ⚠ 有**互斥锁** `~/.local/state/obsidian-inbox/sediment.lock`：定时器/手动/平行会话共用，防并发读写账本；等锁最多 60s，拿不到退出 1；持有者超 30 分钟视为已死自动接管。`distill` 拿不到锁会立即失败（不排队）。
 
 手动用法：
 
@@ -228,7 +229,9 @@ node scripts/note.mjs distill \
   --note "已提炼为专题笔记"        # 或「内容已被现有笔记完整覆盖，无需追加」
 ```
 
-标记会写入归档 frontmatter 的 `distilled / distilled_into / distilled_note / distilled_at`，随后索引页显示 `✅ [[目标笔记]]`，并统计"已提炼 / 待提炼"。重复标记是幂等的。
+标记会写入归档 frontmatter 的 `distilled / distilled_into / distilled_note / distilled_at`，随后索引页显示 `✅ [[目标笔记]]`，并统计"已提炼 / 待提炼"。重复标记是幂等的（不传 `--note` 保留原有说明，不会抹掉）。
+
+**标记时自动校准 domain**：归档的 `domain` 应等于提炼目标笔记所在的目录——cwd 路由出的 domain 可能与知识落点不同（如 app 里聊 DSH 工具，知识落 `dawn/知识库`）；不一致时命令会改正并输出 `domain 校准：A → B`，索引的领域分布随之正确。`--force` 重写归档也会保留已校准的 domain（与 distilled 标记、H1 一起保留）。
 
 > 提炼完的归档可以删（`dsh-sessions/` 只留原料）。删之前确认目标笔记已经承接住内容——**删归档不会删主题笔记**。
 

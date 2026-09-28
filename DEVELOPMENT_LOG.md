@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×18
-- dev-log: #1×19
-- obsidian-inbox: #2×18
-- skill 开发: #1×19, #2×18
+- 知识库: #2×19
+- dev-log: #1×20
+- obsidian-inbox: #2×19
+- skill 开发: #1×20, #2×19
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -160,6 +160,14 @@ skill 开发, obsidian-inbox, 知识库
 - `②writeNote force 覆写时保留 distilled_* 提炼标记与既有 H1 标题（防止重写即丢/标题漂移）`
 - `③真实运行前写 [run] pid/cwd/argv/window 留痕到 sediment.log（--reindex 不留）`
 - `skills/obsidian-inbox/SKILL.md - 修改, 归档流程补 force 保留语义、[run] 留痕与 import 守卫说明`
+
+### （续）续记：修复并发竞态与"重写即丢"状态家族（互斥锁、distill domain 校准、force 保留 domain、markDistilled 空参不抹旧值）
+
+**改动文件**：
+- `scripts/lib.mjs - 修改, 新增 acquireLock/release（STATE_DIR/sediment.lock，stale 30min 接管、waitMs 可配）；markDistilled 空 into/note 时保留旧值`
+- `scripts/sediment.mjs - 修改, main() 开头接互斥锁（等60s 失败退出1、SIGINT/SIGTERM 退出前释放）；writeNote force 覆写追加保留已校准 domain`
+- `scripts/note.mjs - 修改, cmdDistill 接锁（waitMs=0 拿不到立即失败）+ 自动校准 domain（domain = 提炼目标所在目录，输出校准前后）`
+- `skills/obsidian-inbox/SKILL.md - 修改, 归档节补互斥锁说明，提炼节补 domain 自动校准与 force 保留语义`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：

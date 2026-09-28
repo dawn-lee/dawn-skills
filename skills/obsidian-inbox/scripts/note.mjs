@@ -13,13 +13,13 @@
  *
  * 退出码：0 成功 / 2 用法错误 / 3 目标已存在（需 --append 或 --force） / 4 未找到
  */
-import { existsSync, statSync } from 'node:fs';
-import { basename, join, relative, sep } from 'node:path';
+import { existsSync, statSync, readFileSync } from 'node:fs';
+import { basename, dirname, join, relative, sep } from 'node:path';
 import {
   loadConfig, routeDir, slugify, buildFrontmatter, atomicWrite, readNote,
   searchNotes, findExistingByTitle, appendSection, vaultAbs, fmtTime, parseArgs,
   readBodyArg, normalizeRel, assertNoteDir, listSubdirs, catalogEntries, assertDirReady,
-  markDistilled,
+  markDistilled, listNoteIndex, parseFrontmatter, acquireLock,
 } from './lib.mjs';
 
 // 下游提前关管道（如 `| head -1`）时安静退出，不要抛 EPIPE 栈
@@ -168,13 +168,36 @@ function cmdDistill() {
   if (typeof args.into !== 'string' || !args.into.trim()) {
     fail(2, 'distill 需要 --into（提炼到的主题笔记，如 "[[输入法问题]]"）');
   }
-  const res = markDistilled(cfg, args.path, {
-    into: args.into.trim(),
-    note: typeof args.note === 'string' ? args.note : '',
-  });
+  // 与归档进程互斥：sediment 可能正在读改写同一篇归档（不排队，拿不到立即失败）
+  const release = acquireLock({ waitMs: 0 });
+  if (!release) fail(2, '归档进程正在运行（锁被占用），稍后重试 distill');
+  process.on('exit', () => release());
+  let calibrated = null;
+  let res;
+  try {
+    // domain 校准：归档 domain 应等于提炼目标所在目录（cwd 路由出的 domain 可能与知识落点不同）
+    const intoName = args.into.replace(/^\[\[/, '').replace(/\]\]$/, '').split('|')[0].trim();
+    const hit = listNoteIndex(cfg, 100000).find((p) => basename(p, '.md') === intoName);
+    if (hit && !normalizeRel(hit).startsWith(`${cfg.archiveDir}/`)) {
+      const targetDir = dirname(hit);
+      const raw = readFileSync(absPath, 'utf8');
+      const { fields } = parseFrontmatter(raw);
+      if (fields.domain && fields.domain !== targetDir) {
+        atomicWrite(absPath, raw.replace(/^domain:.*$/m, `domain: ${targetDir}`));
+        calibrated = { from: fields.domain, to: targetDir };
+      }
+    }
+    res = markDistilled(cfg, args.path, {
+      into: args.into.trim(),
+      note: typeof args.note === 'string' ? args.note : '',
+    });
+  } finally {
+    release();
+  }
   process.stdout.write(json
-    ? `${JSON.stringify({ ok: true, ...res }, null, 2)}\n`
-    : `${res.path} → 已标记提炼到 ${res.into}\n`);
+    ? `${JSON.stringify({ ok: true, ...res, ...(calibrated ? { calibrated } : {}) }, null, 2)}\n`
+    : `${res.path} → 已标记提炼到 ${res.into}`
+      + `${calibrated ? `\n  domain 校准：${calibrated.from} → ${calibrated.to}` : ''}\n`);
 }
 
 function cmdRoute() {

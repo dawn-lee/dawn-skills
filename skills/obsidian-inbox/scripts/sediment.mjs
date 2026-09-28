@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import {
   SKILL_DIR, STATE_DIR, loadConfig, routeDir, slugify, buildFrontmatter, atomicWrite,
   appendSection, vaultAbs, fmtTime, parseArgs, normalizeRel, listNoteIndex, sanitizeBodyLinks,
-  parseFrontmatter,
+  parseFrontmatter, acquireLock,
 } from './lib.mjs';
 
 const HOME = homedir();
@@ -405,8 +405,11 @@ function writeNote(cfg, s, note, prev, args) {
   }
 
   // force 整篇覆盖重写（用于纠正内容有误的归档）；新写则直接落盘。
-  // 覆写时保留两类人工状态，避免重写即丢：distilled_* 提炼标记、既有 H1 标题（防标题漂移）
+  // 覆写时保留三类人工状态，避免重写即丢：
+  // ① distilled_* 提炼标记；② 既有 H1 标题（防标题漂移）；
+  // ③ 已提炼归档的 domain（distill 时按知识落点校准过，不能被 cwd 路由重置）
   let preserveFm = '';
+  let keepDomain = null;
   let keepTitle = note.title;
   if (exists) {
     try {
@@ -414,12 +417,16 @@ function writeNote(cfg, s, note, prev, args) {
       const oldFm = old.match(/^---\n([\s\S]*?)\n---/);
       if (oldFm) {
         preserveFm = oldFm[1].split('\n').filter((l) => /^distilled(_into|_note|_at)?:/.test(l)).join('\n');
+        if (/^distilled:\s*true/m.test(oldFm[1])) {
+          keepDomain = (oldFm[1].match(/^domain:\s*(\S+)/m) || [])[1] || null;
+        }
       }
       const h1 = old.match(/^# (.+)$/m);
       if (h1) keepTitle = h1[1];
     } catch { /* 旧文件读不到就按新写处理 */ }
   }
-  const fmMerged = preserveFm ? fm.replace(/\n---$/, `\n${preserveFm}\n---`) : fm;
+  let fmMerged = preserveFm ? fm.replace(/\n---$/, `\n${preserveFm}\n---`) : fm;
+  if (keepDomain) fmMerged = fmMerged.replace(/^domain:.*$/m, `domain: ${keepDomain}`);
   atomicWrite(absPath, `${fmMerged}\n\n# ${keepTitle}\n\n${meta}\n\n${note.body}\n`);
   return { status: exists ? 'rewritten' : 'created', notePath, domain, unclassified };
 }
@@ -522,6 +529,22 @@ const quiet = args.quiet === true;
 const limit = Number(args.limit) > 0 ? Number(args.limit) : Infinity;
 
 mkdirSync(WORK_DIR, { recursive: true });
+
+// 互斥锁：定时器 / 手动 / 平行会话共用，防止并发读写账本与归档笔记（并行会互相覆盖）
+const releaseLock = acquireLock({
+  waitMs: 60000,
+  onWait: (o) => log(`另一归档进程正在运行（pid=${o.pid}），等待释放…`),
+});
+if (!releaseLock) {
+  process.stdout.write(`${JSON.stringify({
+    ok: false,
+    error: '归档锁被占用超过 60s（持有者仍在运行），本次退出；稍后重试',
+    lock: join(STATE_DIR, 'sediment.lock'),
+  }, null, 2)}\n`);
+  process.exit(1);
+}
+process.on('exit', () => releaseLock());
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => process.exit(130));
 
 // --reindex：只重建归档索引页，不扫描/不调用模型
 if (args.reindex === true) {

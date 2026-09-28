@@ -444,6 +444,50 @@ export function sanitizeBodyLinks(cfg, body) {
  * 让「归档 → 主题笔记」这一环可追踪，索引页据此统计积压。
  * 只动 frontmatter，不改正文；重复调用是幂等的。
  */
+/**
+ * 归档互斥锁：账本 archived.json、归档笔记都是"读-改-写"，定时器 / 手动 / 平行会话
+ * 并行跑会互相覆盖。锁文件在 STATE_DIR/sediment.lock；持有超过 30 分钟视为已死
+ * （单轮归档含 LLM ≈ 10 分钟），自动接管。
+ * 返回 release 函数（幂等）；拿不到锁返回 null。waitMs=0 表示不等待立即失败。
+ */
+export function acquireLock({ waitMs = 60000, onWait = null } = {}) {
+  const lockPath = join(STATE_DIR, 'sediment.lock');
+  const token = `${process.pid}:${Date.now()}:${Math.random().toString(36).slice(2)}`;
+  const start = Date.now();
+  let announced = false;
+  mkdirSync(STATE_DIR, { recursive: true });
+  for (;;) {
+    try {
+      writeFileSync(lockPath, JSON.stringify({ pid: process.pid, at: Date.now(), token }), { flag: 'wx' });
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        try {
+          const cur = JSON.parse(readFileSync(lockPath, 'utf8'));
+          if (cur.token === token) rmSync(lockPath, { force: true });
+        } catch { /* 锁已不在 */ }
+      };
+    } catch (err) {
+      if (err?.code !== 'EEXIST') throw err;
+      let owner = null;
+      try { owner = JSON.parse(readFileSync(lockPath, 'utf8')); } catch { /* 损坏按过期处理 */ }
+      if (!owner?.at || Date.now() - owner.at > LOCK_STALE_MS) {
+        rmSync(lockPath, { force: true }); // 持有者已死（如被 SIGKILL），接管
+        continue;
+      }
+      if (Date.now() - start >= waitMs) return null;
+      if (!announced) {
+        announced = true;
+        try { onWait?.(owner); } catch { /* 提示失败不影响等锁 */ }
+      }
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 2000);
+    }
+  }
+}
+
+const LOCK_STALE_MS = 30 * 60 * 1000;
+
 export function markDistilled(cfg, relPath, { into, note = '' } = {}) {
   const absPath = vaultAbs(cfg, relPath);
   const raw = readFileSync(absPath, 'utf8');
@@ -451,8 +495,9 @@ export function markDistilled(cfg, relPath, { into, note = '' } = {}) {
   const merged = {
     ...fields,
     distilled: true,
-    distilled_into: into || undefined,
-    distilled_note: note || undefined,
+    // 未提供新值时保留旧值：空参数的重标记不应抹掉已有的提炼说明/目标
+    distilled_into: into || fields.distilled_into || undefined,
+    distilled_note: note || fields.distilled_note || undefined,
     distilled_at: fmtTime(Date.now()),
   };
   const content = `${buildFrontmatter(merged)}\n\n${body.replace(/^\n+/, '')}`;
