@@ -12,6 +12,7 @@
 | **wan2.7-video-skill** | 基于wan2.7视频生成模型，支持文生视频、图生视频和视频续写 | `video_generation.py` `check_video_task_status.py` `file_to_oss.py` | `common.md` `video-generation.md` `prompt-guide.md` |
 | **dev-log** | 开发日志记录：读写双通道，写入靠 git 真值 + 脚本编号，读取靠头部主题索引，把 DEVELOPMENT_LOG.md 变成 LLM 可追溯的项目记忆库 | `dev-log.mjs` | - |
 | **db-sync** | 在数据库之间同步表数据，读取 DataGrip 配置自动发现数据源 | `db-sync.sh` | - |
+| **obsidian-inbox** | Obsidian 知识库沉淀：把会话中可复用的知识写进笔记库（自动 frontmatter、按 cwd 路由、写前查重），并提供检索通道；另含每日定时归档，把当天会话精炼成笔记落库 | `note.mjs` `sediment.mjs` | - |
 
 将持续更新多种技能到技能列表。
 
@@ -91,6 +92,16 @@ dawn-skills/
     │   ├── SKILL.md                            # 技能描述文件
     │   └── scripts
     │       └── dev-log.mjs                     # 读写脚本（snapshot/add/index/link/query）
+    ├── obsidian-inbox                          # Obsidian 知识库沉淀技能
+    │   ├── SKILL.md                            # 技能描述文件（读写通道 + 定时归档说明）
+    │   ├── config.json                         # 知识库路径、目录路由、摘要预算
+    │   ├── run-sediment.sh                     # 定时任务入口（解析 node/nvm 后执行归档）
+    │   ├── patch
+    │   │   └── headless-notes-only.yml         # 归档运行时最小权限补丁（禁用全部工具）
+    │   └── scripts
+    │       ├── lib.mjs                         # 路由/frontmatter/原子写/检索
+    │       ├── note.mjs                        # 写/查通道（new/append/search/show/route）
+    │       └── sediment.mjs                    # 每日归档（会话 → 笔记）
     └── wan2.7-video-skill                      # wan2.7视频生成技能
         ├── references
         │   ├── common.md                       # 通用配置文档

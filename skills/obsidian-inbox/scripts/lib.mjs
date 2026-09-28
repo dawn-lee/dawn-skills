@@ -1,0 +1,293 @@
+/**
+ * obsidian-inbox 共享库：vault 路由、frontmatter、原子写入、检索、追加。
+ *
+ * 约定：
+ * - 所有写入都走 atomicWrite（同目录 tmp + rename），避免半截文件被 Obsidian 索引。
+ * - 只写 .md，且从不触碰 .obsidian / .trash / .smart-env。
+ */
+import {
+  readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync,
+  renameSync, rmSync,
+} from 'node:fs';
+import { dirname, join, resolve, relative, basename, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
+
+export const SKILL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+export const CONFIG_PATH = join(SKILL_DIR, 'config.json');
+/**
+ * 运行期状态（归档账本、日志、headless 工作目录）**不放在技能源码里**，
+ * 避免技能以软链方式接入 ~/.agents/skills 时把状态写进 git 工作区。
+ * 默认 $XDG_STATE_HOME/obsidian-inbox，可用 OBSIDIAN_INBOX_STATE 覆盖。
+ */
+export const STATE_DIR = process.env.OBSIDIAN_INBOX_STATE
+  ? resolve(process.env.OBSIDIAN_INBOX_STATE)
+  : join(process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'obsidian-inbox');
+
+export function expandHome(p) {
+  if (!p) return p;
+  if (p === '~') return homedir();
+  if (p.startsWith('~/')) return join(homedir(), p.slice(2));
+  return p;
+}
+
+export function loadConfig() {
+  const raw = JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
+  const cfg = { ...raw };
+  cfg.vault = resolve(expandHome(cfg.vault));
+  cfg.defaultDir = cfg.defaultDir || 'dawn';
+  cfg.sessionSubdir = cfg.sessionSubdir ?? 'dsh-sessions';
+  cfg.routes = Array.isArray(cfg.routes) ? cfg.routes : [];
+  cfg.searchExclude = cfg.searchExclude || ['.obsidian', '.trash', '.smart-env', '.git'];
+  cfg.excludeCwdPrefixes = cfg.excludeCwdPrefixes || [];
+  if (!existsSync(cfg.vault)) throw new Error(`vault 不存在：${cfg.vault}`);
+  return cfg;
+}
+
+export function normalizeRel(p) {
+  return String(p ?? '')
+    .replace(/\\/g, '/')
+    .replace(/^\.?\//, '')
+    .replace(/\/+$/, '');
+}
+
+/** 显式 --dir > cwd 正则路由 > defaultDir；返回 vault 相对目录（可能是 ''）。 */
+export function routeDir(cfg, cwd, explicitDir) {
+  if (explicitDir && explicitDir !== true) return normalizeRel(explicitDir);
+  const c = cwd ? resolve(expandHome(String(cwd))) : '';
+  for (const r of cfg.routes) {
+    let re;
+    try { re = new RegExp(r.pattern); } catch { continue; }
+    if (c && re.test(c)) return normalizeRel(r.dir);
+  }
+  return normalizeRel(cfg.defaultDir);
+}
+
+const ILLEGAL_FS = /[\\/:*?"<>|#^[\]]/g;
+
+export function slugify(title, maxLen = 80) {
+  let s = String(title ?? '').replace(/[\u0000-\u001f]/g, '');
+  s = s.replace(ILLEGAL_FS, ' ');
+  s = s.replace(/\s+/g, ' ').trim();
+  s = s.replace(/^\.+/, '').trim();
+  if (s.length > maxLen) s = s.slice(0, maxLen).trim();
+  return s || '未命名笔记';
+}
+
+/** 归一化用于查重比较：去标点、去空白、转小写。 */
+export function normalizeForCompare(s) {
+  return String(s ?? '')
+    .toLowerCase()
+    .replace(/[\s\-_.,;:!?，。；：！？、"'“”‘’()（）[\]【】]/g, '');
+}
+
+const RISKY_YAML = [':', '#', '{', '}', '[', ']', '&', '*', '!', '|', '>', "'", '"', '%', '@', '`', ',', '\n', '\t', '\\'];
+
+function yamlScalar(v) {
+  const s = String(v);
+  const risky = s.trim() !== s || s === '' || RISKY_YAML.some((c) => s.includes(c))
+    || /^(true|false|null|~|yes|no|on|off)$/i.test(s) || /^-?\d+(\.\d+)?$/.test(s);
+  return risky ? JSON.stringify(s) : s;
+}
+
+/** 生成 YAML frontmatter 块（不含尾部空行）。空值自动省略。 */
+export function buildFrontmatter(fields) {
+  const lines = ['---'];
+  for (const [k, v] of Object.entries(fields)) {
+    if (v === undefined || v === null || v === '') continue;
+    if (Array.isArray(v)) {
+      const items = v.filter((x) => x !== undefined && x !== null && String(x) !== '');
+      if (!items.length) continue;
+      lines.push(`${k}:`);
+      for (const item of items) lines.push(`  - ${yamlScalar(item)}`);
+    } else {
+      lines.push(`${k}: ${yamlScalar(v)}`);
+    }
+  }
+  lines.push('---');
+  return lines.join('\n');
+}
+
+export function atomicWrite(absPath, content) {
+  mkdirSync(dirname(absPath), { recursive: true });
+  const tmp = `${absPath}.tmp-${process.pid}-${Date.now()}`;
+  writeFileSync(tmp, content, 'utf8');
+  try {
+    renameSync(tmp, absPath);
+  } catch (err) {
+    try { rmSync(tmp, { force: true }); } catch {}
+    throw err;
+  }
+  return absPath;
+}
+
+export function parseFrontmatter(raw) {
+  if (!raw.startsWith('---')) return { fields: {}, body: raw };
+  const end = raw.indexOf('\n---', 3);
+  if (end === -1) return { fields: {}, body: raw };
+  const fm = raw.slice(3, end).trim();
+  const bodyStart = raw.indexOf('\n', end + 1);
+  const body = bodyStart === -1 ? '' : raw.slice(bodyStart + 1);
+  const fields = {};
+  let listKey = null;
+  for (const line of fm.split('\n')) {
+    const m = line.match(/^([A-Za-z0-9_\u4e00-\u9fff-]+):\s*(.*)$/);
+    if (m) {
+      const [, k, v] = m;
+      if (v === '') { fields[k] = []; listKey = k; } else { fields[k] = v.replace(/^["']|["']$/g, ''); listKey = null; }
+      continue;
+    }
+    const li = line.match(/^\s+-\s+(.*)$/);
+    if (li && listKey) fields[listKey].push(li[1].replace(/^["']|["']$/g, ''));
+  }
+  return { fields, body };
+}
+
+export function readNote(absPath) {
+  const raw = readFileSync(absPath, 'utf8');
+  const { fields, body } = parseFrontmatter(raw);
+  return { raw, fields, body, title: basename(absPath, '.md') };
+}
+
+export function* walkNotes(cfg, dir = cfg.vault) {
+  let entries;
+  try { entries = readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  for (const e of entries) {
+    const abs = join(dir, e.name);
+    const rel = relative(cfg.vault, abs).split(sep).join('/');
+    if (cfg.searchExclude.some((x) => rel === x || rel.startsWith(`${x}/`))) continue;
+    if (e.isDirectory()) {
+      if (e.name.startsWith('.')) continue;
+      yield* walkNotes(cfg, abs);
+    } else if (e.isFile() && e.name.toLowerCase().endsWith('.md')) {
+      yield abs;
+    }
+  }
+}
+
+function snippetAround(raw, term, width = 90) {
+  const idx = raw.toLowerCase().indexOf(String(term).toLowerCase());
+  if (idx === -1) return '';
+  const start = Math.max(0, idx - Math.floor(width / 3));
+  const text = raw.slice(start, start + width).replace(/\s+/g, ' ').trim();
+  return `${start > 0 ? '…' : ''}${text}${start + width < raw.length ? '…' : ''}`;
+}
+
+/** 关键词检索（子串匹配，对中文友好）；标题/路径/正文加权。 */
+export function searchNotes(cfg, query, limit = 10, opts = {}) {
+  const terms = String(query ?? '').split(/[\s,，]+/).filter(Boolean);
+  if (!terms.length) return [];
+  const results = [];
+  for (const abs of walkNotes(cfg)) {
+    let st;
+    try { st = statSync(abs); } catch { continue; }
+    if (st.size > 512 * 1024) continue;
+    let raw;
+    try { raw = readFileSync(abs, 'utf8'); } catch { continue; }
+    const lower = raw.toLowerCase();
+    const rel = relative(cfg.vault, abs).split(sep).join('/');
+    const title = basename(abs, '.md');
+    const lowerTitle = title.toLowerCase();
+    const lowerRel = rel.toLowerCase();
+    let score = 0;
+    const matched = [];
+    for (const t of terms) {
+      const lt = t.toLowerCase();
+      let termScore = 0;
+      if (lowerTitle.includes(lt)) termScore += 10;
+      if (lowerRel.includes(lt)) termScore += 4;
+      let idx = -1;
+      let count = 0;
+      while (count < 5 && (idx = lower.indexOf(lt, idx + 1)) !== -1) count++;
+      if (count) termScore += count * 2;
+      if (termScore) { score += termScore; matched.push(t); }
+    }
+    if (!score) continue;
+    results.push({ path: rel, absPath: abs, title, score, matched, snippet: snippetAround(raw, terms[0]) });
+  }
+  results.sort((a, b) => b.score - a.score || a.path.localeCompare(b.path));
+  return results.slice(0, Math.max(1, limit));
+}
+
+/** 按文件名（归一化）在 vault 内查重，返回相对路径数组。 */
+export function findExistingByTitle(cfg, title) {
+  const target = normalizeForCompare(title);
+  const hits = [];
+  for (const abs of walkNotes(cfg)) {
+    if (normalizeForCompare(basename(abs, '.md')) === target) {
+      hits.push(relative(cfg.vault, abs).split(sep).join('/'));
+    }
+  }
+  return hits.sort();
+}
+
+/** 追加内容：给了 section 就写进该二级标题段末尾，否则追加到文件末尾。 */
+export function appendSection(absPath, section, content) {
+  const raw = readFileSync(absPath, 'utf8');
+  const cleaned = String(content ?? '').trim();
+  if (!cleaned) return absPath;
+  if (!section) {
+    return atomicWrite(absPath, `${raw.replace(/\s+$/, '')}\n\n${cleaned}\n`);
+  }
+  const esc = String(section).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const headingRe = new RegExp(`^#{1,6}\\s*${esc}\\s*$`);
+  const lines = raw.split('\n');
+  let start = -1;
+  for (let i = 0; i < lines.length; i++) if (headingRe.test(lines[i])) start = i;
+  if (start === -1) {
+    return atomicWrite(absPath, `${raw.replace(/\s+$/, '')}\n\n## ${section}\n\n${cleaned}\n`);
+  }
+  const level = (lines[start].match(/^#+/) || ['##'])[0].length;
+  let end = lines.length;
+  for (let i = start + 1; i < lines.length; i++) {
+    const m = lines[i].match(/^(#+)\s/);
+    if (m && m[1].length <= level) { end = i; break; }
+  }
+  const out = [...lines.slice(0, end), '', cleaned, '', ...lines.slice(end)];
+  return atomicWrite(absPath, out.join('\n').replace(/\n{4,}/g, '\n\n\n').replace(/\s+$/, '') + '\n');
+}
+
+export function vaultAbs(cfg, relPath) {
+  const p = String(relPath ?? '');
+  return p.startsWith('/') ? p : join(cfg.vault, normalizeRel(p));
+}
+
+export function fmtTime(ms, withTime = true) {
+  if (!ms) return '';
+  const d = new Date(Number(ms));
+  const pad = (n) => String(n).padStart(2, '0');
+  const date = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return withTime ? `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}` : date;
+}
+
+export function parseArgs(argv) {
+  const out = { _: [] };
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
+    if (a.startsWith('--')) {
+      const key = a.slice(2);
+      const next = argv[i + 1];
+      if (next === undefined || (next.startsWith('--') && next.length > 2)) out[key] = true;
+      else { out[key] = next; i++; }
+    } else {
+      out._.push(a);
+    }
+  }
+  return out;
+}
+
+export function readStdin() {
+  try { return readFileSync(0, 'utf8'); } catch { return ''; }
+}
+
+export function readBodyArg(args) {
+  if (typeof args.body === 'string') return args.body;
+  const bf = args['body-file'];
+  if (typeof bf === 'string') return bf === '-' ? readStdin() : readFileSync(expandHome(bf), 'utf8');
+  if (bf === true) return readStdin();
+  if (!process.stdin.isTTY) {
+    const data = readStdin();
+    if (data.trim()) return data;
+  }
+  return '';
+}

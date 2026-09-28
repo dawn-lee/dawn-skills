@@ -1,0 +1,100 @@
+# 仅供 obsidian-inbox / sediment.mjs 使用：headless 归档运行时的最小权限补丁。
+#
+# 目的：让 `dsh headless` 只做「文本进 → 文本出」的摘要，禁掉全部工具、子代理与交互能力。
+# 原因：会话摘要里可能夹带外部网页/文件内容（prompt injection 风险），而本机默认策略是
+#       danger-full-access；禁止工具后，即使模型被注入也无从执行。
+#
+# 用法：dsh --profile headless --patch <本文件> -
+
+# —— 文件 / Shell / 任务工具
+- id: tool-bash
+  disabled: true
+- id: tool-pwsh
+  disabled: true
+- id: tool-jobs
+  disabled: true
+- id: tool-fs
+  disabled: true
+- id: tool-fs-search
+  disabled: true
+
+# —— 技能 / 待办 / 目标 / 计划
+- id: tool-skill
+  disabled: true
+- id: skill
+  disabled: true
+- id: skill-filesystem
+  disabled: true
+- id: skill-badge
+  disabled: true
+- id: tool-todo
+  disabled: true
+- id: tool-goal
+  disabled: true
+- id: goal
+  disabled: true
+- id: goal-round-driver
+  disabled: true
+- id: command-goal
+  disabled: true
+- id: plan-mode
+  disabled: true
+
+# —— 子代理与工作流
+- id: tool-subagent
+  disabled: true
+- id: tool-subagent-control
+  disabled: true
+- id: tool-subagent-list-agents
+  disabled: true
+- id: tool-subagent-fork
+  disabled: true
+- id: subagent
+  disabled: true
+- id: subagent-spawn-in-process
+  disabled: true
+- id: subagent-fork-in-process
+  disabled: true
+- id: tool-workflow
+  disabled: true
+- id: workflow-ptc
+  disabled: true
+- id: ptc-runtime
+  disabled: true
+
+# —— 交互与插件管理（批处理里不会有人回答提问）
+- id: user-questions
+  disabled: true
+- id: tool-plugin-manager
+  disabled: true
+
+# —— 模型：headless 默认走 deepseek-official（本机没有该 route 的 key）。
+#    这里对齐 web profile 的方舟 coding-plan，key 取 credentials 里的 VOLCENGINE_API_KEY。
+#    若你换模型，改这里即可（同时更新 agent-default-model）。
+- id: llm-pi-ai
+  config:
+    providers:
+      volcengine:
+        displayName: 方舟coding-plan
+        apiKeyEnv: VOLCENGINE_API_KEY
+        api: openai-responses
+        baseURL: https://ark.cn-beijing.volces.com/api/coding/v3
+        models:
+          - id: deepseek-v4.1-flash
+            name: deepseek-v4.1-flash
+            contextWindow: 1000000
+            maxTokens: 384000
+          - id: glm-5.3-flash
+            name: glm-5.3-flash
+            contextWindow: 1000000
+            maxTokens: 128000
+- id: agent-default-model
+  config:
+    provider: volcengine
+    model: deepseek-v4.1-flash
+
+# —— 不落库：沉淀任务自身不需要出现在会话列表里
+- id: session-persistence-jsonl
+  disabled: true
+- id: session-checkpoint-policy
+  disabled: true

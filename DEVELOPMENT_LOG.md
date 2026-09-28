@@ -6,8 +6,39 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- dev-log: #1
-- skill 开发: #1
+- 知识库: #2
+- dev-log: #1×2
+- obsidian-inbox: #2
+- skill 开发: #1×2, #2
+
+---
+## Session #2 - 2026-09-28 11:04
+
+**需求**：
+新增 obsidian-inbox 技能：把会话中可复用的知识沉淀进 Obsidian 知识库，含写入通道、检索通道与每日定时归档兜底
+
+**主题**：
+skill 开发, obsidian-inbox, 知识库
+
+**改动文件**：
+- `skills/obsidian-inbox/SKILL.md - 新增, 技能定义（读写通道、笔记格式、定时归档说明、源码与安装约定）`
+- `skills/obsidian-inbox/config.json - 新增, 知识库路径/目录路由/排除规则/摘要预算`
+- `skills/obsidian-inbox/scripts/lib.mjs - 新增, 共享库（vault 路由、frontmatter、原子写、检索、追加）`
+- `skills/obsidian-inbox/scripts/note.mjs - 新增, 写/查通道 CLI（new/append/search/show/route，含查重与退出码约定）`
+- `skills/obsidian-inbox/scripts/sediment.mjs - 新增, 每日归档（扫 projcache → headless 精炼 → 落笔记，按轮次记账追加补记）`
+- `skills/obsidian-inbox/run-sediment.sh - 新增, 定时任务入口（自解析 nvm/node，-P 解析真实源码路径）`
+- `skills/obsidian-inbox/patch/headless-notes-only.yml - 新增, 归档运行时最小权限补丁（禁用全部工具 + 指定模型）`
+- `README.md - 修改, 技能表与项目结构树补充 obsidian-inbox`
+
+**变更摘要**：
+面向会话的知识沉淀技能，双通道 + 定时兜底。① note.mjs 提供写/查通道：new 自动生成 frontmatter、按 cwd 正则路由到知识库的 dawn/ 或 work/ 领域目录、写前按标题归一化查重（命中返回退出码 3 与 similar 列表），append 可按二级标题定位插入，写入统一走同目录 tmp + rename 原子写；search 为子串匹配（对中文友好），按标题/路径/正文加权，用于动手前检索历史笔记。② sediment.mjs 由 systemd user timer 每天 23:00 触发：从 ~/.dsh/storages/session_projcache/sessions/*.json 读 turnOutline（含每轮 prompt/response 预览，无需解压 transcript）拼摘要，交给 dsh headless 精炼成结构化笔记，落到 <领域>/dsh-sessions/；模型判定无价值则输出 SKIP 跳过；archived.json 按会话记录已归档轮次，同一会话新增轮次追加补记而非重复建档。安全设计：归档运行时挂 patch/headless-notes-only.yml 禁用全部工具、子代理与交互插件，防止摘要夹带的外部内容触发提示注入，并把 headless 默认的 deepseek-official 换成方舟 coding-plan。运行期状态写在 XDG 的 ~/.local/state/obsidian-inbox，源码留在仓库、~/.agents/skills/obsidian-inbox 以软链接入。
+
+**遇到的问题**：
+- headless 默认 provider 是 deepseek-official，本机无该 route 的 key，报 MISSING_CREDENTIAL；补丁注入 volcengine provider 与 agent-default-model 后解决
+- headless 默认带 bash/fs 工具且本机策略是 danger-full-access，而摘要含外部网页内容，存在提示注入风险；禁用全部工具使其退化为纯文本进文本出
+- 归档任务自身的 headless 会话会被持久化并进入下次扫描范围，形成自我归档；禁用 session-persistence-jsonl 并在 config 排除状态目录前缀，同时清理测试期产生的 8 条会话记录
+- 技能以软链接入 ~/.agents/skills 后运行期状态会落进 git 工作区；改到 ~/.local/state/obsidian-inbox 并更新 excludeCwdPrefixes
+- 自测修复三处：JSDoc 注释里含 */ 的 glob 导致 ESM 解析失败、ESM 中误用 require、解析模型输出时 tags 注释漏进笔记正文
 
 ---
 ## Session #1 - 2026-08-14 11:10
