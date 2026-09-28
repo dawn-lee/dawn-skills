@@ -402,7 +402,7 @@ function buildArchiveIndex(cfg) {
   for (const e of entries) {
     const dom = e.domain ? `${e.domain}${e.unclassified ? ' ⚠' : ''}` : '⚠未标注';
     const dis = e.distilledInto ? `✅ ${e.distilledInto}` : '⏳ 待提炼';
-    lines.push(`| ${e.date} | ${dom} | [[${e.name}\\|${e.title}]] | ${dis} | \`${e.session || '-'}\` |`);
+    lines.push(`| ${e.date} | ${dom} | [[${e.name}]] | ${dis} | \`${e.session || '-'}\` |`);
   }
   lines.push('');
   return { content: lines.join('\n'), count: entries.length, pending, path: `${relDir}/${INDEX_NAME}` };
