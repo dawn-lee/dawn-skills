@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×14
-- dev-log: #1×15
-- obsidian-inbox: #2×14
-- skill 开发: #1×15, #2×14
+- 知识库: #2×15
+- dev-log: #1×16
+- obsidian-inbox: #2×15
+- skill 开发: #1×16, #2×15
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -133,6 +133,13 @@ skill 开发, obsidian-inbox, 知识库
 **改动文件**：
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, writeNote：--force 时整篇覆盖重写（原来文件存在就无条件追加，force 也留下旧内容）`
 - `skills/obsidian-inbox/SKILL.md - 修改, 补充 --force=整篇覆盖重写语义`
+
+### （续）续记：文档一致性整理——SKILL.md 修正重复 D 标题、全局 AGENTS.md 与方案文档同步当前实现
+
+**改动文件**：
+- `skills/obsidian-inbox/SKILL.md - 修改, 修正第二个 ## D. 为 ## E.（边界），归档流程第 5 步 --force 说明括号错位清理`
+- `知识库 dawn/知识库/DSH 会话知识自动沉淀到 Obsidian 的方案.md - 重写, 同步当前实现（work/arch/<子项目> 嵌套、transcript 兜底、代码块整段保留、--force 覆盖、提炼三归宿、DEVELOPMENT_LOG 续记数 6→13），移除过时历史代码转储`
+- `全局 ~/.dsh/AGENTS.md - 修改, 落位规则补 work/arch/<子项目> 嵌套，会话归档段补提炼循环（三种归宿）`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：
