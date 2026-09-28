@@ -214,6 +214,9 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/lib.mjs - 修改, 新增 themeDirs 辅助函数；assertKnownCatalogEntry 对 domainNotes 登记的主题目录放行、报错清单合并主题目录；assertNoteDir 容器根提示合并主题目录`
 - `skills/obsidian-inbox/config.json - 修改, catalogSources 新增 dawn → ~/Documents/projects/dawn`
 - `skills/obsidian-inbox/SKILL.md - 修改, 代码会拦截段补 dawn 目录校验规则与 domainNotes 豁免说明`
+
+**commit**：6102f5b
+
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：
