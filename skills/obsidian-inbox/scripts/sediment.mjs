@@ -13,11 +13,12 @@
  *                             [--force] [--quiet] [--json]
  */
 import {
-  readFileSync, existsSync, mkdirSync, readdirSync, appendFileSync, statSync as statSyncFs,
+  readFileSync, existsSync, mkdirSync, readdirSync, appendFileSync, statSync as statSyncFs, realpathSync,
 } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join, basename } from 'node:path';
 import { homedir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import {
   SKILL_DIR, STATE_DIR, loadConfig, routeDir, slugify, buildFrontmatter, atomicWrite,
   appendSection, vaultAbs, fmtTime, parseArgs, normalizeRel, listNoteIndex, sanitizeBodyLinks,
@@ -403,8 +404,23 @@ function writeNote(cfg, s, note, prev, args) {
     return { status: 'appended', notePath, domain, unclassified };
   }
 
-  // force：整篇覆盖重写（用于纠正内容有误的归档）；否则是新写
-  atomicWrite(absPath, `${fm}\n\n# ${note.title}\n\n${meta}\n\n${note.body}\n`);
+  // force 整篇覆盖重写（用于纠正内容有误的归档）；新写则直接落盘。
+  // 覆写时保留两类人工状态，避免重写即丢：distilled_* 提炼标记、既有 H1 标题（防标题漂移）
+  let preserveFm = '';
+  let keepTitle = note.title;
+  if (exists) {
+    try {
+      const old = readFileSync(absPath, 'utf8');
+      const oldFm = old.match(/^---\n([\s\S]*?)\n---/);
+      if (oldFm) {
+        preserveFm = oldFm[1].split('\n').filter((l) => /^distilled(_into|_note|_at)?:/.test(l)).join('\n');
+      }
+      const h1 = old.match(/^# (.+)$/m);
+      if (h1) keepTitle = h1[1];
+    } catch { /* 旧文件读不到就按新写处理 */ }
+  }
+  const fmMerged = preserveFm ? fm.replace(/\n---$/, `\n${preserveFm}\n---`) : fm;
+  atomicWrite(absPath, `${fmMerged}\n\n# ${keepTitle}\n\n${meta}\n\n${note.body}\n`);
   return { status: exists ? 'rewritten' : 'created', notePath, domain, unclassified };
 }
 
@@ -492,6 +508,9 @@ function writeArchiveIndex(cfg, { quiet } = {}) {
 
 // ---------------------------------------------------------------- 主流程
 
+// ─── 主流程包进 main()：底部 isMain 守卫决定是否执行。
+// 此前是顶层裸执行，被 import（如误 import('./scripts/sediment.mjs')）会直接触发全量归档。
+function main() {
 const args = parseArgs(process.argv.slice(2));
 const cfg = loadConfig();
 const state = loadState();
@@ -510,6 +529,9 @@ if (args.reindex === true) {
   process.stdout.write(`${JSON.stringify({ ok: Boolean(built), mode: 'reindex', ...(built ?? {}) }, null, 2)}\n`);
   process.exit(0);
 }
+
+// 运行留痕：记录 pid/cwd/参数/窗口，便于审计"这次归档是谁触发的"（曾有无法归因的运行）
+log(`[run] pid=${process.pid} cwd=${process.cwd()} argv=${process.argv.slice(2).join(' ') || '(默认窗口)'} window=${win.label}`);
 
 const candidates = collectSessions(cfg, win, args);
 const result = {
@@ -654,3 +676,13 @@ process.stdout.write(`${JSON.stringify(args.json === true ? result : {
   skipped: result.skipped,
   failed: result.failed,
 }, null, 2)}\n`);
+}
+
+// isMain 守卫：被 import 时只导出定义、不执行主流程（误 import 曾触发过全量归档）
+function isMainModule() {
+  try {
+    return Boolean(process.argv[1])
+      && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
+  } catch { return false; }
+}
+if (isMainModule()) main();

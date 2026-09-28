@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×17
-- dev-log: #1×18
-- obsidian-inbox: #2×17
-- skill 开发: #1×18, #2×17
+- 知识库: #2×18
+- dev-log: #1×19
+- obsidian-inbox: #2×18
+- skill 开发: #1×19, #2×18
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -152,6 +152,14 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/config.json - 修改, routes 增加 projects/dawn/<项目> → dawn/{1}（置于容器兜底之前），domainNotes 补 dawn/dawn-skills 并改写 dawn/dawn/dawn/知识库 说明`
 - `skills/obsidian-inbox/SKILL.md - 修改, 目录约定加项目目录概念（dawn/<项目> 镜像 projects/dawn）与 dawn/dawn-skills 行，路由表拆分 projects/dawn/<项目> 与容器兜底`
 - `全局 ~/.dsh/AGENTS.md - 修改, 落位规则补 dawn 下一级=主题目录或项目目录`
+
+### （续）续记：修复 sediment 三个隐患（import 误触全量、force 丢提炼标记、运行无留痕）；审计定位到一次无法归因的运行
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/sediment.mjs - 修改, ①主流程包进 main() + isMain 守卫（被 import 只加载定义不执行，此前误 import 触发过全量归档）`
+- `②writeNote force 覆写时保留 distilled_* 提炼标记与既有 H1 标题（防止重写即丢/标题漂移）`
+- `③真实运行前写 [run] pid/cwd/argv/window 留痕到 sediment.log（--reindex 不留）`
+- `skills/obsidian-inbox/SKILL.md - 修改, 归档流程补 force 保留语义、[run] 留痕与 import 守卫说明`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：
