@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×5
-- dev-log: #1×6
-- obsidian-inbox: #2×5
-- skill 开发: #1×6, #2×5
+- 知识库: #2×6
+- dev-log: #1×7
+- obsidian-inbox: #2×6
+- skill 开发: #1×7, #2×6
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -72,6 +72,13 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/SKILL.md - 修改, 新增「拿不准就问，不要猜」小节（含 ask_user_question 用法与待归类标签说明）`
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 域只落到容器根时写 unclassified: true 与 dsh/待归类 标签，callout 标注待归类`
 - `skills/obsidian-inbox/scripts/lib.mjs - 修改, buildFrontmatter 支持布尔值（此前被引号包成字符串，Obsidian 属性变文本）`
+
+### （续）续记：把「拿不准就问」从 work 扩展到所有落位决策，新建分类目录需用户确认（--mkdir）
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/lib.mjs - 修改, 新增 assertDirReady()：落位目录必须已存在，或显式 --mkdir；work/<已知业务域> 例外放行`
+- `skills/obsidian-inbox/scripts/note.mjs - 修改, new 接入 assertDirReady、route 输出了目录是否存在与「需 --mkdir」告警、用法补充该参数`
+- `skills/obsidian-inbox/SKILL.md - 修改, 「拿不准就问，不许乱放」改为通用规则（三种必须问的情形 + 候选问法 + 四类代码拦截表）`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：

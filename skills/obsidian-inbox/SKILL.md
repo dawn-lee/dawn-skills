@@ -88,18 +88,40 @@ node scripts/note.mjs route --cwd "$PWD"
 
 **归档不走领域目录**：会话归档统一落在**顶层** `dsh-sessions/`，避免 `dawn/`、`work/` 被原始素材污染；会话归属的领域（`dawn/pop`、`work/service`…）记在归档笔记 frontmatter 的 `domain` 字段里，可用它筛选/建 Dataview 视图。
 
-### 拿不准就问，不要猜
+### 拿不准就问，不许乱放
 
-会话 cwd 能反推领域时（如 `projects/work/service/**`）直接路由，不用问。但下面两种情况**必须主动问用户**，不要为了"看起来合理"随手挑一个：
+**原则：落位必须是"确定的"。** 只要对"这条笔记该放哪"有疑问，就停下来问用户，不要为了看起来合理随手挑一个目录，也不要"先放这儿以后再说"——错误的分类比没写更麻烦，它会把知识库的结构稀释掉。
 
-- cwd 给不出信息（典型：`~/.dsh/workspace`、`/tmp`），而内容明显属于内部业务 → 用 `ask_user_question` 把 `companyDomains()` 的真实域清单列成选项让用户选；
-- 需要新建主题子目录、但主题边界不清楚（比如该进 `dawn/pop` 还是新建 `dawn/性能调优`）。
+必须问的情形：
 
-问的时候带上可选值，例如：
+| 情形 | 例子 |
+|---|---|
+| cwd 给不出归属信息 | 在 `~/.dsh/workspace`、`/tmp` 里聊内部业务，路由只会给容器根 |
+| 需要在领域下**新建分类目录** | 该进已有的 `dawn/pop`，还是新建 `dawn/性能调优`？ |
+| 内容跨领域、边界不清 | 业务项目里踩到的个人环境问题，算 `work/<域>` 还是 `dawn/pop`？ |
+
+问的时候**带上候选和"其它"**，让用户一次点完：
+
 ```
-node scripts/note.mjs route --json | 读 companyDomains
-→ ask_user_question: "这条笔记属于哪个域？" 选项 work/service、work/ops、work/arch…
+# 先拿候选：业务域实时读 projects/work，个人子目录读 vault 已有目录
+node scripts/note.mjs route --cwd "$PWD"          # 看路由给出的落点与含义
+node scripts/note.mjs route --dir dawn --json     # 看 dawn 下已有哪些子目录
+
+# 再问：
+ask_user_question("这条笔记放哪？",
+  选项：dawn/pop、dawn/docker、dawn/知识库、其它（请给新目录名）)
 ```
+
+代码会兜住这条规则，四种情况直接失败（exit 2），不会静默写错地方：
+
+| 落点 | 结果 |
+|---|---|
+| `dawn` / `work`（容器根） | 报错 + 列出可选子目录 / 业务域清单 |
+| `work/<不存在的域>` | 报错 + 列出真实业务域 |
+| 库外绝对路径 | 报错（`路径不在知识库内`） |
+| **不存在的分类目录** | 报错：*"写入等于新建一个分类…确认后再加 `--mkdir`；拿不准就先问用户"* |
+
+`--mkdir` 是"我已确认这个分类"的显式声明——**只有用户点头之后才用它**。例外：`work/<已知业务域>`（域清单来自 `~/Documents/projects/work/`）属于你既定的分类体系，首次写入会自动建目录，不必确认。
 
 归档是无人值守的，问不了人：当域只能落到容器根（`dawn` / `work`）时，笔记会写 `unclassified: true` 并打上 `dsh/待归类` 标签。事后用标签视图或 `note.mjs search --query 待归类` 捞出来，确认域之后改掉 `domain`、删掉标签即可。
 

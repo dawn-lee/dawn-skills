@@ -159,6 +159,27 @@ export function assertNoteDir(cfg, relDir, source) {
   throw new Error(`${rel} 是领域容器，不能直接把笔记放在根下（来源：${source}）；请指定下一级。${hint}`);
 }
 
+/**
+ * 落位目录必须是**已存在**的，或者调用方显式声明要新建（`--mkdir`）。
+ * 例外：`work/<已知业务域>` 属于用户既定的分类体系（域清单来自 projects/work），直接放行。
+ *
+ * 目的：新建分类是不可逆的目录污染，不许"随手建一个看起来合理的"；
+ * 拿不准就先问用户，得到明确同意后再带 --mkdir 写入。
+ */
+export function assertDirReady(cfg, relDir, { create = false, source = '' } = {}) {
+  const rel = normalizeRel(relDir);
+  if (!rel || existsSync(join(cfg.vault, rel))) return rel;
+  if (rel.startsWith('work/') && companyDomains(cfg).includes(rel.split('/')[1])) return rel;
+  if (create) return rel;
+  const parent = rel.split('/').slice(0, -1).join('/');
+  const siblings = listSubdirs(cfg, parent);
+  throw new Error(
+    `目录 ${rel} 在知识库里不存在，写入等于新建一个分类（来源：${source}）。`
+    + '确认这个分类合适后再加 --mkdir；拿不准就先问用户。'
+    + (siblings.length ? `同级已有：${siblings.join('、')}` : ''),
+  );
+}
+
 const ILLEGAL_FS = /[\\/:*?"<>|#^[\]]/g;
 
 export function slugify(title, maxLen = 80) {

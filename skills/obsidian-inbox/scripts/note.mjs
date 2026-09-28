@@ -17,14 +17,14 @@ import { basename, join, relative, sep } from 'node:path';
 import {
   loadConfig, routeDir, slugify, buildFrontmatter, atomicWrite, readNote,
   searchNotes, findExistingByTitle, appendSection, vaultAbs, fmtTime, parseArgs,
-  readBodyArg, normalizeRel, assertNoteDir, listSubdirs, companyDomains,
+  readBodyArg, normalizeRel, assertNoteDir, listSubdirs, companyDomains, assertDirReady,
 } from './lib.mjs';
 
 // 下游提前关管道（如 `| head -1`）时安静退出，不要抛 EPIPE 栈
 process.stdout.on('error', (err) => { if (err?.code === 'EPIPE') process.exit(0); });
 
 const USAGE = `用法：
-  note.mjs new --title T [--dir D] [--type TYPE] [--tags a,b] [--cwd P] [--session ID] [--date-prefix] [--append|--force] [--body-file -] [--json]
+  note.mjs new --title T [--dir D] [--mkdir] [--type TYPE] [--tags a,b] [--cwd P] [--session ID] [--date-prefix] [--append|--force] [--body-file -] [--json]
   note.mjs append --path P [--section S] [--body-file -] [--json]
   note.mjs search --query Q [--limit N] [--json]
   note.mjs show --path P [--json]
@@ -71,11 +71,13 @@ function cmdNew() {
   if (typeof args.title !== 'string' || !args.title.trim()) fail(2, 'new 需要 --title');
   const title = args.title.trim();
   const slug = slugify(title);
+  const dirSource = typeof args.dir === 'string' ? `--dir ${args.dir}` : '按 cwd 路由';
   const dirRel = assertNoteDir(
     cfg,
     routeDir(cfg, typeof args.cwd === 'string' ? args.cwd : process.cwd(), args.dir),
-    typeof args.dir === 'string' ? `--dir ${args.dir}` : '按 cwd 路由',
+    dirSource,
   );
+  assertDirReady(cfg, dirRel, { create: args.mkdir === true, source: dirSource });
   const prefix = args['date-prefix'] === true ? `${todayStr()} ` : '';
   const relPath = normalizeRel([dirRel, `${prefix}${slug}.md`].filter(Boolean).join('/'));
   const absPath = vaultAbs(cfg, relPath);
@@ -157,6 +159,7 @@ function cmdShow() {
 function cmdRoute() {
   const dir = routeDir(cfg, typeof args.cwd === 'string' ? args.cwd : process.cwd(), args.dir);
   const isContainer = cfg.domainRoots.includes(dir);
+  const exists = !dir || existsSync(join(cfg.vault, dir));
   const subdirs = listSubdirs(cfg, dir);
   const domains = companyDomains(cfg);
   const suggestions = dir === 'work' && domains.length
@@ -164,7 +167,7 @@ function cmdRoute() {
     : subdirs;
   if (json) {
     process.stdout.write(`${JSON.stringify({
-      ok: true, dir, isContainer, meaning: cfg.domainNotes[dir], subdirs,
+      ok: true, dir, exists, isContainer, meaning: cfg.domainNotes[dir], subdirs,
       companyDomains: dir === 'work' ? domains : undefined, vault: cfg.vault,
     }, null, 2)}\n`);
     return;
@@ -173,5 +176,7 @@ function cmdRoute() {
   if (cfg.domainNotes[dir]) process.stdout.write(`  ${cfg.domainNotes[dir]}\n`);
   if (isContainer) {
     process.stdout.write(`⚠ ${dir} 是领域容器，笔记必须落到下一级${suggestions.length ? `：${suggestions.join('、')}` : ''}\n`);
+  } else if (!exists) {
+    process.stdout.write('⚠ 该目录在知识库里还不存在：写入等于新建分类，需 --mkdir，先确认是否合适\n');
   }
 }
