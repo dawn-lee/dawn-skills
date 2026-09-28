@@ -70,25 +70,38 @@ node scripts/note.mjs route --cwd "$PWD"
 
 ### 目录约定（放错位置等于白写）
 
+知识库有**三个平级容器**，各自内部再分层；容器根下一律不放笔记。
+
 | 目录 | 含义 |
 |---|---|
-| `dawn/` | **个人资料容器**：根下**不放笔记**，必须落到下一级主题子目录 |
+| `dawn/` | **个人资料容器**：根下不放笔记，必须落到下一级主题子目录 |
 | `dawn/pop` | 系统相关（Pop!_OS 桌面、输入法、显示、电源、硬件） |
 | `dawn/docker` | 个人 docker / 容器相关项目文档 |
 | `dawn/知识库` | 个人知识库 / AI 工具链自动化（Obsidian、DSH 配置） |
 | `work/` | **工作资料容器**：第二级**必须是业务域**，域名取自 `~/Documents/projects/work/` 的子目录 |
 | `work/<域>` | 现有域：`arch`、`service`、`ops`、`work-skills`、`utils`、`workspace`；域内可直接放笔记，可再按项目细分 |
-| `dsh-sessions/` | **顶层归档区**（跨领域原始素材，sediment 专用，不属于任何领域） |
+| `opensource/` | **第三方开源项目容器**：既不属于业务也不属于个人；第二级**必须是仓库名**，取自 `~/Documents/projects/opensource/` 的子目录 |
+| `opensource/<仓库>` | 现有：`forks`、`mcp`、`skills`（`agentscope-java` 例外，见下）；仓库内可直接放笔记 |
+| `dsh-sessions/` | **顶层归档区**（跨领域原始素材，sediment 专用，不属于任何容器） |
 
-判定顺序：先在已有目录里找匹配（`pop` 管系统、`docker` 管容器、`work/<域>` 管业务域）→ 都不匹配才**按主题新建**（如 `dawn/性能调优`）→ 实在拿不准就问用户，**不要往容器根写**。
+判定顺序：先在已有目录里找匹配（`pop` 管系统、`docker` 管容器、`work/<域>` 管业务域、`opensource/<仓库>` 管开源项目）→ 都不匹配才**按主题新建**（如 `dawn/性能调优`）→ 实在拿不准就问用户，**不要往容器根写**。
 
-`--dir` 缺省时按会话 cwd 自动路由（见 `config.json` 的 `routes`，第一条匹配生效，支持 `{1}` 捕获组）：`projects/work/<域>/**` → `work/<域>`，`projects/work` 本身 → `work`，`projects/opensource/agentscope-java/**` → `work/arch`（下载的调研源码跟随调研主题），`projects/opensource/forks/**` → `dawn`（个人 fork），其余 `opensource/**` → `work`（尚未明确归属，会落"待归类"），`projects/dawn/**` 与兜底 → `dawn`。
+`--dir` 缺省时按会话 cwd 自动路由（见 `config.json` 的 `routes`，第一条匹配生效，支持 `{1}` 捕获组）：
 
-> 下载第三方源码做技术调研时，**源码目录 ≠ 归属**：归属应跟随调研主题（如 AgentScope 调研归 `work/arch`）。遇到未登记的新调研仓库，问用户后补一条路由。
+| cwd | 落位 |
+|---|---|
+| `projects/work/<域>/**` | `work/<域>` |
+| `projects/work` 本身 | `work`（容器根，归档会判"待归类"） |
+| `projects/opensource/agentscope-java/**` | `work/arch` ← **例外**：它是为内部调研任务下载的源码，归属跟随调研主题 |
+| `projects/opensource/<仓库>/**` | `opensource/<仓库>`（含 `forks`，个人 fork 也归开源容器） |
+| `projects/opensource` 本身 | `opensource`（容器根） |
+| `projects/dawn/**` 与兜底 | `dawn` |
 
-**代码会拦截**：`note.mjs new` 落点为容器根（`dawn`/`work`）时报错并列出可选目录；`work/<不存在的域>` 也会报错并列出真实域清单（域清单实时读 `~/Documents/projects/work/`，新增域自动生效）。`route` 命令会打印目录含义与 `⚠` 提示。
+> **源码目录 ≠ 归属**：下载第三方源码做调研时，归属跟随调研主题；只有确认是"内部业务调研"才例外归业务域（如 agentscope-java → `work/arch`）。遇到未登记的新仓库，问用户后补一条路由。
 
-**归档不走领域目录**：会话归档统一落在**顶层** `dsh-sessions/`，避免 `dawn/`、`work/` 被原始素材污染；会话归属的领域（`dawn/pop`、`work/service`…）记在归档笔记 frontmatter 的 `domain` 字段里，可用它筛选/建 Dataview 视图。
+**代码会拦截**：`note.mjs new` 落点为容器根（`dawn`/`work`/`opensource`）时报错并列出可选目录；`work/<不存在的域>`、`opensource/<不存在的仓库>` 同样报错并列出真实清单（清单实时读 `projects/` 下的目录，新增自动生效）。`route` 命令会打印目录含义与 `⚠` 提示。
+
+**归档不走领域目录**：会话归档统一落在**顶层** `dsh-sessions/`，避免容器被原始素材污染；会话归属（`dawn/pop`、`work/service`、`opensource/mcp`…）记在归档笔记 frontmatter 的 `domain` 字段里，可用它筛选/建 Dataview 视图。
 
 ### 拿不准就问，不许乱放
 

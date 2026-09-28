@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×7
-- dev-log: #1×8
-- obsidian-inbox: #2×7
-- skill 开发: #1×8, #2×7
+- 知识库: #2×8
+- dev-log: #1×9
+- obsidian-inbox: #2×8
+- skill 开发: #1×9, #2×8
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -86,6 +86,14 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/config.json - 修改, 新增 projects/opensource/agentscope-java → work/arch 路由（置于通用 opensource 规则之前），work/arch 说明补充调研类归属`
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 新增 --min-chars 覆盖有效内容量门槛`
 - `skills/obsidian-inbox/SKILL.md - 修改, 路由说明补充"下载源码归属跟随调研主题"与 --min-chars 用法及门槛口径说明`
+
+### （续）续记：新增 opensource 第三容器（第三方开源项目既非业务也非个人），普通化分类清单配置
+
+**改动文件**：
+- `skills/obsidian-inbox/config.json - 修改, domainRoots 增加 opensource；companyDomainSource 泛化为 catalogSources{work,opensource}；新增 opensource 路由（捕获仓库名）与 agentscope-java → work/arch 例外；domainNotes 补 opensource 各仓库说明`
+- `skills/obsidian-inbox/scripts/lib.mjs - 修改, companyDomains 泛化为 catalogEntries(cfg,domain)、unknown 校验与放行规则随之通用化；容器报错提示改为按容器列既定分类`
+- `skills/obsidian-inbox/scripts/note.mjs - 修改, route 输出改为通用 catalogEntries`
+- `skills/obsidian-inbox/SKILL.md - 修改, 目录约定改为三容器结构 + cwd 路由表 + 例外说明`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：

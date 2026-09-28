@@ -17,7 +17,7 @@ import { basename, join, relative, sep } from 'node:path';
 import {
   loadConfig, routeDir, slugify, buildFrontmatter, atomicWrite, readNote,
   searchNotes, findExistingByTitle, appendSection, vaultAbs, fmtTime, parseArgs,
-  readBodyArg, normalizeRel, assertNoteDir, listSubdirs, companyDomains, assertDirReady,
+  readBodyArg, normalizeRel, assertNoteDir, listSubdirs, catalogEntries, assertDirReady,
 } from './lib.mjs';
 
 // 下游提前关管道（如 `| head -1`）时安静退出，不要抛 EPIPE 栈
@@ -161,21 +161,19 @@ function cmdRoute() {
   const isContainer = cfg.domainRoots.includes(dir);
   const exists = !dir || existsSync(join(cfg.vault, dir));
   const subdirs = listSubdirs(cfg, dir);
-  const domains = companyDomains(cfg);
-  const suggestions = dir === 'work' && domains.length
-    ? domains.map((d) => `work/${d}`)
-    : subdirs;
+  const entries = catalogEntries(cfg, dir);
+  const suggestions = entries.length ? entries.map((d) => `${dir}/${d}`) : subdirs;
   if (json) {
     process.stdout.write(`${JSON.stringify({
       ok: true, dir, exists, isContainer, meaning: cfg.domainNotes[dir], subdirs,
-      companyDomains: dir === 'work' ? domains : undefined, vault: cfg.vault,
+      catalogEntries: entries.length ? entries : undefined, vault: cfg.vault,
     }, null, 2)}\n`);
     return;
   }
   process.stdout.write(`${dir}\n`);
   if (cfg.domainNotes[dir]) process.stdout.write(`  ${cfg.domainNotes[dir]}\n`);
   if (isContainer) {
-    process.stdout.write(`⚠ ${dir} 是领域容器，笔记必须落到下一级${suggestions.length ? `：${suggestions.join('、')}` : ''}\n`);
+    process.stdout.write(`⚠ ${dir} 是容器，笔记必须落到下一级${suggestions.length ? `：${suggestions.join('、')}` : ''}\n`);
   } else if (!exists) {
     process.stdout.write('⚠ 该目录在知识库里还不存在：写入等于新建分类，需 --mkdir，先确认是否合适\n');
   }

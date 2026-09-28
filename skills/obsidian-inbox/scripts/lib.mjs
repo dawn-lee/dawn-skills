@@ -42,6 +42,7 @@ export function loadConfig() {
   cfg.excludeCwdPrefixes = cfg.excludeCwdPrefixes || [];
   cfg.domainRoots = (cfg.domainRoots || []).map((r) => normalizeRel(r));
   cfg.domainNotes = cfg.domainNotes || {};
+  cfg.catalogSources = cfg.catalogSources || {};
   if (!existsSync(cfg.vault)) throw new Error(`vault 不存在：${cfg.vault}`);
   return cfg;
 }
@@ -101,11 +102,15 @@ export function routeDir(cfg, cwd, explicitDir) {
   return normalizeRel(cfg.defaultDir);
 }
 
-/** 业务域清单：直接读 companyDomainSource 下的子目录，不写死，新增域自动生效。 */
-export function companyDomains(cfg) {
-  if (!cfg.companyDomainSource) return [];
+/**
+ * 某容器的既定分类清单：直接读 catalogSources 里配置的目录，不写死，新增项自动生效。
+ * 例：`work` → projects/work 下的业务域；`opensource` → projects/opensource 下的仓库名。
+ */
+export function catalogEntries(cfg, domain) {
+  const src = (cfg.catalogSources ?? {})[domain];
+  if (!src) return [];
   try {
-    return readdirSync(expandHome(cfg.companyDomainSource), { withFileTypes: true })
+    return readdirSync(expandHome(src), { withFileTypes: true })
       .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
       .map((e) => e.name)
       .sort();
@@ -114,14 +119,19 @@ export function companyDomains(cfg) {
   }
 }
 
-function assertKnownCompanyDomain(cfg, rel, source) {
-  const domains = companyDomains(cfg);
-  if (!domains.length) return;
-  const seg = rel.split('/')[1];
-  if (domains.includes(seg)) return;
+/** 业务域清单（catalogEntries 在 work 上的别名，语义更直白）。 */
+export function companyDomains(cfg) {
+  return catalogEntries(cfg, 'work');
+}
+
+function assertKnownCatalogEntry(cfg, rel, source) {
+  const [head, seg] = rel.split('/');
+  const entries = catalogEntries(cfg, head);
+  if (!entries.length) return;
+  if (entries.includes(seg)) return;
   throw new Error(
-    `work/${seg} 不是已知的业务域（来源：${source}）；`
-    + `现有业务域：${domains.map((d) => `work/${d}`).join('、')}`,
+    `${head}/${seg} 不是已知的${head === 'work' ? '业务域' : '开源仓库'}（来源：${source}）；`
+    + `现有：${entries.map((d) => `${head}/${d}`).join('、')}`,
   );
 }
 
@@ -139,29 +149,31 @@ export function listSubdirs(cfg, relDir) {
 }
 
 /**
- * 领域根（dawn / work）只作容器，笔记必须落到下一级：
- * - `dawn` 下按主题建子目录；`work` 下第二级必须是真实存在的业务域。
+ * 容器根（dawn / work / opensource）只作容器，笔记必须落到下一级：
+ * - `dawn` 下按主题建子目录；
+ * - `work` 下第二级必须是真实存在的业务域；
+ * - `opensource` 下第二级必须是真实存在的开源仓库名。
  * 直接往容器根写，领域目录会被零散笔记淹没，也没法按主题检索。
  */
 export function assertNoteDir(cfg, relDir, source) {
   const rel = normalizeRel(relDir);
   if (!cfg.domainRoots.includes(rel)) {
-    if (rel.startsWith('work/')) assertKnownCompanyDomain(cfg, rel, source);
+    const head = rel.split('/')[0];
+    if ((cfg.catalogSources ?? {})[head]) assertKnownCatalogEntry(cfg, rel, source);
     return rel;
   }
-  const subs = listSubdirs(cfg, rel);
-  const domains = companyDomains(cfg);
-  const hint = rel === 'work' && domains.length
-    ? `业务域应为：${domains.map((d) => `work/${d}`).join('、')}`
-    : (subs.length
-      ? `现有子目录：${subs.join('、')}`
-      : '该领域还没有子目录，请先按主题建一个（如 dawn/pop、dawn/docker）');
-  throw new Error(`${rel} 是领域容器，不能直接把笔记放在根下（来源：${source}）；请指定下一级。${hint}`);
+  const entries = catalogEntries(cfg, rel);
+  const hint = entries.length
+    ? `应为：${entries.map((d) => `${rel}/${d}`).join('、')}`
+    : (listSubdirs(cfg, rel).length
+      ? `现有子目录：${listSubdirs(cfg, rel).join('、')}`
+      : '该容器还没有子目录，请先按主题建一个（如 容器下的主题目录）');
+  throw new Error(`${rel} 是容器，不能直接把笔记放在根下（来源：${source}）；请指定下一级。${hint}`);
 }
 
 /**
  * 落位目录必须是**已存在**的，或者调用方显式声明要新建（`--mkdir`）。
- * 例外：`work/<已知业务域>` 属于用户既定的分类体系（域清单来自 projects/work），直接放行。
+ * 例外：容器的**既定分类**（`work/<业务域>`、`opensource/<仓库>`，清单来自 catalogSources）直接放行。
  *
  * 目的：新建分类是不可逆的目录污染，不许"随手建一个看起来合理的"；
  * 拿不准就先问用户，得到明确同意后再带 --mkdir 写入。
@@ -169,7 +181,8 @@ export function assertNoteDir(cfg, relDir, source) {
 export function assertDirReady(cfg, relDir, { create = false, source = '' } = {}) {
   const rel = normalizeRel(relDir);
   if (!rel || existsSync(join(cfg.vault, rel))) return rel;
-  if (rel.startsWith('work/') && companyDomains(cfg).includes(rel.split('/')[1])) return rel;
+  const [head, seg] = rel.split('/');
+  if (seg && (cfg.catalogSources ?? {})[head] && catalogEntries(cfg, head).includes(seg)) return rel;
   if (create) return rel;
   const parent = rel.split('/').slice(0, -1).join('/');
   const siblings = listSubdirs(cfg, parent);
