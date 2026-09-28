@@ -51,9 +51,42 @@ export function normalizeRel(p) {
     .replace(/\/+$/, '');
 }
 
+export function safeDecode(s) {
+  try { return decodeURIComponent(s); } catch { return s; }
+}
+
+function vaultRoot(cfg) {
+  return cfg.vault.replace(/\/+$/, '');
+}
+
+/**
+ * 把路径解析成 vault 相对路径。
+ *
+ * 关键防护：以 vault 根开头的绝对路径会被**转成相对路径**。这是本技能最容易踩的坑——
+ * Obsidian 把 Markdown 链接里以 `/` 开头的目标当成**库内相对路径**，一旦把
+ * `~/Documents/Obsidian Vault/dawn/pop/x.md` 原样写进去，点击会在库里
+ * 建出 `<库根>~/...` 的嵌套空文件。写入侧同样不能把绝对路径当相对路径拼。
+ *
+ * @param allowOutside 库外绝对路径时返回 null 而不是抛错。
+ */
+export function toVaultRel(cfg, p, { allowOutside = false } = {}) {
+  const raw = String(p ?? '').trim();
+  if (!raw) return '';
+  const decoded = safeDecode(raw).replace(/^file:\/\//, '');
+  if (decoded.startsWith('/') || /^[A-Za-z]:[\\/]/.test(decoded)) {
+    const normalized = decoded.replace(/\\/g, '/');
+    const root = vaultRoot(cfg);
+    if (normalized === root) return '';
+    if (normalized.startsWith(`${root}/`)) return normalizeRel(normalized.slice(root.length + 1));
+    if (allowOutside) return null;
+    throw new Error(`路径不在知识库内：${raw}（知识库为 ${root}）`);
+  }
+  return normalizeRel(decoded);
+}
+
 /** 显式 --dir > cwd 正则路由 > defaultDir；返回 vault 相对目录（可能是 ''）。 */
 export function routeDir(cfg, cwd, explicitDir) {
-  if (explicitDir && explicitDir !== true) return normalizeRel(explicitDir);
+  if (explicitDir && explicitDir !== true) return toVaultRel(cfg, explicitDir);
   const c = cwd ? resolve(expandHome(String(cwd))) : '';
   for (const r of cfg.routes) {
     let re;
@@ -247,9 +280,48 @@ export function appendSection(absPath, section, content) {
   return atomicWrite(absPath, out.join('\n').replace(/\n{4,}/g, '\n\n\n').replace(/\s+$/, '') + '\n');
 }
 
+/** vault 内的绝对路径；库外绝对路径直接报错，避免写到知识库之外。 */
 export function vaultAbs(cfg, relPath) {
-  const p = String(relPath ?? '');
-  return p.startsWith('/') ? p : join(cfg.vault, normalizeRel(p));
+  return join(cfg.vault, toVaultRel(cfg, relPath));
+}
+
+/** vault 内所有笔记的相对路径（排序后），供「引用清单」使用。 */
+export function listNoteIndex(cfg, limit = 400) {
+  const all = [];
+  for (const abs of walkNotes(cfg)) all.push(relative(cfg.vault, abs).split(sep).join('/'));
+  all.sort();
+  return all.slice(0, Math.max(1, limit));
+}
+
+/**
+ * 把正文里会被 Obsidian 误解的 Markdown 链接降级，避免“点一下就凭空建出嵌套空文件”：
+ * - 指向库内已有笔记的链接 → `[[笔记名]]`（链接文字与笔记名不同则写 `[[名|文字]]`）；
+ * - 其余路径型链接（库外绝对路径、库内不存在的路径）→ 行内代码，不可点击；
+ * - `http(s)` / `mailto` / `tel` / 锚点链接与既有 `[[wikilink]]` 原样保留。
+ */
+export function sanitizeBodyLinks(cfg, body) {
+  const root = vaultRoot(cfg);
+  const wikilinkFor = (candidate, text) => {
+    const rel = normalizeRel(candidate);
+    if (!rel || !existsSync(join(cfg.vault, rel))) return null;
+    const name = basename(rel, '.md');
+    const label = String(text ?? '').trim().replace(/\.md$/i, '');
+    return label && label !== name ? `[[${name}|${label}]]` : `[[${name}]]`;
+  };
+  return String(body ?? '').replace(
+    /\[([^\]\n]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g,
+    (whole, text, target) => {
+      if (/^(https?:|mailto:|tel:|#)/i.test(target)) return whole;
+      const decoded = safeDecode(target.replace(/^file:\/\//, '')).replace(/\\/g, '/');
+      if (decoded.startsWith('/')) {
+        if (decoded === root || decoded.startsWith(`${root}/`)) {
+          return wikilinkFor(decoded.slice(root.length), text) ?? `\`${decoded}\``;
+        }
+        return `\`${decoded}\``;
+      }
+      return wikilinkFor(decoded, text) ?? `\`${decoded}\``;
+    },
+  );
 }
 
 export function fmtTime(ms, withTime = true) {

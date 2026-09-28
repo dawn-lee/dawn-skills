@@ -20,7 +20,7 @@ import { dirname, join, basename } from 'node:path';
 import { homedir } from 'node:os';
 import {
   SKILL_DIR, STATE_DIR, loadConfig, routeDir, slugify, buildFrontmatter, atomicWrite,
-  appendSection, vaultAbs, fmtTime, parseArgs, normalizeRel,
+  appendSection, vaultAbs, fmtTime, parseArgs, normalizeRel, listNoteIndex, sanitizeBodyLinks,
 } from './lib.mjs';
 
 const HOME = homedir();
@@ -51,12 +51,18 @@ const PROMPT_TEMPLATE = `你是 Obsidian 知识库的整理助手。下面是一
 ## 注意事项 / 坑
 <容易踩错的地方，没有就省略这一节>
 ## 产出与引用
-<涉及的文件、文档、链接，用行内代码或链接标注>
+<涉及的文件、文档、链接>
 
-3. 不要输出 frontmatter（脚本自动生成）、不要输出任何解释性开场白、不要调用工具。
-4. 标签用中文或英文名词，2-5 个，用逗号分隔，放在 HTML 注释里（如上）。
-5. 全文使用简体中文；保留具体数值与路径，删掉寒暄和过程性废话。
-6. 只针对本次摘要中出现的内容，不要编造、不要补充你自己的推测。
+3. 引用规则（很重要，写错会污染知识库）：
+   - 引用**知识库里的笔记**：只写 Obsidian 内链 \`[[笔记名]]\`，笔记名必须**逐字取自**摘要末尾的「知识库现有笔记」清单；
+   - 引用**知识库以外的文件**（源码、日志、docx、命令等）：用行内代码写路径，例如 \`~/xxx\` 或 \`~/.local/bin/xxx\`；
+   - **绝对禁止**把任何路径写成 Markdown 链接（形如 \`[文字](/home/...)\`）。Obsidian 会把以 \`/\` 开头的链接当成库内相对路径，点击会在库里凭空建出 \`<库根>/home/...\` 的嵌套空文件；
+   - 不要臆造路径、行号或文件名；清单里没有、摘要里也没出现的，就不要写；
+   - 不要引用或链接本次归档笔记自身。
+4. 不要输出 frontmatter（脚本自动生成）、不要输出任何解释性开场白、不要调用工具。
+5. 标签用中文或英文名词，2-5 个，用逗号分隔，放在 HTML 注释里（如上）。
+6. 全文使用简体中文；保留具体数值与路径，删掉寒暄和过程性废话。
+7. 只针对本次摘要中出现的内容，不要编造、不要补充你自己的推测。
 
 会话摘要如下：
 <<<DSH_DIGEST_BEGIN>>>
@@ -192,7 +198,15 @@ function substanceOf(s) {
   return chars;
 }
 
-function buildDigest(s, cfg, fromTurn) {
+function buildInventory(cfg) {
+  const notes = listNoteIndex(cfg, 400);
+  if (!notes.length) return '（知识库暂无笔记）';
+  let text = notes.map((p) => `- ${p}`).join('\n');
+  if (text.length > 8000) text = `${text.slice(0, 8000)}\n…（清单过长，已截断）`;
+  return text;
+}
+
+function buildDigest(s, cfg, fromTurn, inventory) {
   const budget = Number(cfg.digestBudgetChars) || 24000;
   const turns = (s.turns ?? []).filter((t) => Number(t.turn) > Number(fromTurn || 0));
   const head = [
@@ -210,7 +224,11 @@ function buildDigest(s, cfg, fromTurn) {
     const r = clip(t.response, perTurn);
     return `### 第 ${t.turn} 轮\n【用户】${p}\n【助手】${r}`;
   }).join('\n\n');
-  return { head, digest: `${head}\n\n${body}`, turns: turns.length };
+  return {
+    head,
+    digest: `${head}\n\n${body}\n\n---\n知识库根目录：${cfg.vault}\n知识库现有笔记（相对路径；引用时写 [[笔记名]]）：\n${inventory}`,
+    turns: turns.length,
+  };
 }
 
 // ---------------------------------------------------------------- LLM 精炼
@@ -336,6 +354,7 @@ if (needLlm) {
 }
 
 let processed = 0;
+const inventory = dryRun ? '' : buildInventory(cfg);
 for (const s of candidates) {
   if (processed >= limit) break;
   const prev = state.sessions[s.id];
@@ -351,7 +370,7 @@ for (const s of candidates) {
   }
 
   processed += 1;
-  const { digest, turns: turnCount } = buildDigest(s, cfg, fromTurn);
+  const { digest, turns: turnCount } = buildDigest(s, cfg, fromTurn, inventory);
   if (!quiet) log(`${isUpdate ? '补记' : '归档'} ${s.id} (${s.title || '未命名'}, ${turnCount} 轮, ${digest.length} 字)`);
 
   if (dryRun) {
@@ -382,6 +401,7 @@ for (const s of candidates) {
         continue;
       }
     }
+    note.body = sanitizeBodyLinks(cfg, note.body);
     const written = writeNote(cfg, s, note, prev, args);
     const entry = { id: s.id, title: note.title, notePath: written.notePath, turns: turnCount };
     (written.status === 'created' ? result.created : result.appended).push(entry);
