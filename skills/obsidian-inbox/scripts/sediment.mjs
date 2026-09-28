@@ -28,6 +28,7 @@ const HOME = homedir();
 // 下游提前关管道（如 `| head`）时安静退出，不要抛 EPIPE 栈
 process.stdout.on('error', (err) => { if (err?.code === 'EPIPE') process.exit(0); });
 const PROJCACHE_DIR = join(HOME, '.dsh/storages/session_projcache/sessions');
+const SESSIONS_ROOT = join(HOME, '.dsh', 'sessions');
 const STATE_PATH = join(STATE_DIR, 'archived.json');
 const LOG_PATH = join(STATE_DIR, 'sediment.log');
 const PATCH_PATH = join(SKILL_DIR, 'patch', 'headless-notes-only.yml');
@@ -199,6 +200,49 @@ function substanceOf(s) {
   let chars = 0;
   for (const t of s.turns) chars += String(t.response ?? '').length;
   return chars;
+}
+
+// ---------------------------------------------------------------- transcript 兜底
+
+/** 在 ~/.dsh/sessions/<slug>/ 下定位某会话的原始记录。 */
+function findTranscript(sid) {
+  try {
+    for (const slug of readdirSync(SESSIONS_ROOT)) {
+      const p = join(SESSIONS_ROOT, slug, sid, 'session.jsonl.zstd');
+      if (existsSync(p)) return p;
+    }
+  } catch { /* 无原始记录目录 */ }
+  return null;
+}
+
+/**
+ * 老会话可能没有 turnOutline 投影（投影功能是后加的），此时回退读原始
+ * transcript：抽 user/message 与 assistant/message 的 text（跳过 reasoning 省 token）。
+ * 返回 { digest, chars, turns }；找不到记录或没有文本则返回 null。
+ */
+function transcriptDigest(sid, budget = 22000) {
+  const tr = findTranscript(sid);
+  if (!tr) return null;
+  const res = spawnSync('zstd', ['-dc', tr], { encoding: 'utf8', maxBuffer: 96 * 1024 * 1024 });
+  if (res.status !== 0) return null;
+  const out = [];
+  let chars = 0, turns = 0;
+  for (const line of String(res.stdout ?? '').split('\n')) {
+    if (!line.trim() || chars >= budget) continue;
+    let e;
+    try { e = JSON.parse(line); } catch { continue; }
+    if (e.type === 'user/message') {
+      const parts = e.data?.message?.content ?? [];
+      const txt = parts.filter((x) => x?.type === 'text').map((x) => x.text ?? '').join(' ').trim();
+      if (txt) { out.push(`【用户】${txt.slice(0, 400)}`); chars += txt.length; }
+    } else if (e.type === 'assistant/message') {
+      const parts = e.data?.message?.content ?? [];
+      const txt = parts.filter((x) => x?.type === 'text').map((x) => x.text ?? '').join('\n').trim();
+      if (txt) { out.push(`【助手】${txt.slice(0, 1400)}`); chars += txt.length; turns += 1; }
+    }
+  }
+  if (!out.length) return null;
+  return { digest: out.join('\n\n'), chars, turns };
 }
 
 function buildInventory(cfg) {
@@ -467,15 +511,34 @@ for (const s of candidates) {
   const isUpdate = Boolean(prev) && Number(s.turnCount) > fromTurn;
 
   if (prev && !force && !isUpdate) { result.skipped.push({ id: s.id, reason: 'unchanged' }); continue; }
-  if (s.blank || !s.turns.length) { result.skipped.push({ id: s.id, reason: 'blank' }); continue; }
-  const chars = substanceOf(s);
+
+  // 内容判定：优先 turnOutline；老会话的投影可能是空的或预览被截断得极小，
+  // 此时回退读原始 transcript，取内容更全的那个
+  const outlineChars = substanceOf(s);
+  let tr = null;
+  if (!s.turns?.length || outlineChars < minChars) {
+    tr = transcriptDigest(s.id);
+  }
+  const chars = tr ? Math.max(outlineChars, tr.chars) : outlineChars;
   if (chars < minChars) {
     result.skipped.push({ id: s.id, reason: 'trivial', chars });
     continue;
   }
 
   processed += 1;
-  const { digest, turns: turnCount } = buildDigest(s, cfg, fromTurn, inventory);
+  let digest, turnCount;
+  const useTranscript = Boolean(tr && tr.chars > outlineChars);
+  if (useTranscript) {
+    turnCount = tr.turns;
+    digest = `${tr.digest}\n\n---\n知识库根目录：${cfg.vault}\n知识库现有笔记（引用时写 [[笔记名]]）：\n${inventory || '（未构建）'}`;
+    if (!quiet) log(`  （${s.id} turnOutline 不完整，已改用原始 transcript 生成摘要）`);
+  } else if (s.turns?.length) {
+    ({ digest, turns: turnCount } = buildDigest(s, cfg, fromTurn, inventory));
+  }
+  if (!digest) {
+    result.skipped.push({ id: s.id, reason: 'no-source', chars });
+    continue;
+  }
   if (!quiet) log(`${isUpdate ? '补记' : '归档'} ${s.id} (${s.title || '未命名'}, ${turnCount} 轮, ${digest.length} 字)`);
 
   if (dryRun) {

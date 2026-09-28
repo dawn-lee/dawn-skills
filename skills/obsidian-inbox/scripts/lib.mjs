@@ -124,15 +124,33 @@ export function companyDomains(cfg) {
   return catalogEntries(cfg, 'work');
 }
 
+/** 判断 rel 是否是"既定分类"：每一级都命中上一级 catalogSources 里的真实子目录。 */
+function isKnownNested(cfg, rel) {
+  const parts = normalizeRel(rel).split('/').filter(Boolean);
+  if (parts.length < 2) return false;
+  for (let i = 1; i < parts.length; i++) {
+    const parent = parts.slice(0, i).join('/');
+    const entries = catalogEntries(cfg, parent);
+    if (!entries.length) return false;
+    if (!entries.includes(parts[i])) return false;
+  }
+  return true;
+}
+
 function assertKnownCatalogEntry(cfg, rel, source) {
-  const [head, seg] = rel.split('/');
-  const entries = catalogEntries(cfg, head);
-  if (!entries.length) return;
-  if (entries.includes(seg)) return;
-  throw new Error(
-    `${head}/${seg} 不是已知的${head === 'work' ? '业务域' : '开源仓库'}（来源：${source}）；`
-    + `现有：${entries.map((d) => `${head}/${d}`).join('、')}`,
-  );
+  const parts = normalizeRel(rel).split('/').filter(Boolean);
+  for (let i = 1; i < parts.length; i++) {
+    const parent = parts.slice(0, i).join('/');
+    const child = parts[i];
+    const entries = catalogEntries(cfg, parent);
+    if (!entries.length) continue; // 父级无清单（如 dawn 下的自由子目录），不校验
+    if (entries.includes(child)) continue;
+    const label = parent === 'work' ? '业务域' : parent === 'work/arch' ? 'arch 子项目' : `${parent} 的子项`;
+    throw new Error(
+      `${parent}/${child} 不是已知的${label}（来源：${source}）；`
+      + `现有：${entries.map((e) => `${parent}/${e}`).join('、')}`,
+    );
+  }
 }
 
 /** 列出某目录下已有的子目录（报错提示与路由展示用）。 */
@@ -181,8 +199,7 @@ export function assertNoteDir(cfg, relDir, source) {
 export function assertDirReady(cfg, relDir, { create = false, source = '' } = {}) {
   const rel = normalizeRel(relDir);
   if (!rel || existsSync(join(cfg.vault, rel))) return rel;
-  const [head, seg] = rel.split('/');
-  if (seg && (cfg.catalogSources ?? {})[head] && catalogEntries(cfg, head).includes(seg)) return rel;
+  if (isKnownNested(cfg, rel)) return rel;
   if (create) return rel;
   const parent = rel.split('/').slice(0, -1).join('/');
   const siblings = listSubdirs(cfg, parent);

@@ -84,12 +84,13 @@ node scripts/note.mjs route --cwd "$PWD"
 | `opensource/<仓库>` | 现有：`forks`、`mcp`、`skills`（`agentscope-java` 例外，见下）；仓库内可直接放笔记 |
 | `dsh-sessions/` | **顶层归档区**（跨领域原始素材，sediment 专用，不属于任何容器） |
 
-判定顺序：先在已有目录里找匹配（`pop` 管系统、`docker` 管容器、`work/<域>` 管业务域、`opensource/<仓库>` 管开源项目）→ 都不匹配才**按主题新建**（如 `dawn/性能调优`）→ 实在拿不准就问用户，**不要往容器根写**。
+判定顺序：先在已有目录里找匹配（`pop` 管系统、`docker` 管容器、`work/<域>` 管业务域、`work/arch/<子项目>` 管 arch 下的具体项目、`opensource/<仓库>` 管开源项目）→ 都不匹配才**按主题新建**（如 `dawn/性能调优`）→ 实在拿不准就问用户，**不要往容器根写**。
 
 `--dir` 缺省时按会话 cwd 自动路由（见 `config.json` 的 `routes`，第一条匹配生效，支持 `{1}` 捕获组）：
 
 | cwd | 落位 |
 |---|---|
+| `projects/work/arch/<子项目>/**` | `work/arch/<子项目>`（子项目清单实时读 `projects/work/arch/`，如 `app`、`app-client`、`pms`） |
 | `projects/work/<域>/**` | `work/<域>` |
 | `projects/work` 本身 | `work`（容器根，归档会判"待归类"） |
 | `projects/opensource/agentscope-java/**` | `work/arch` ← **例外**：它是为内部调研任务下载的源码，归属跟随调研主题 |
@@ -99,7 +100,7 @@ node scripts/note.mjs route --cwd "$PWD"
 
 > **源码目录 ≠ 归属**：下载第三方源码做调研时，归属跟随调研主题；只有确认是"内部业务调研"才例外归业务域（如 agentscope-java → `work/arch`）。遇到未登记的新仓库，问用户后补一条路由。
 
-**代码会拦截**：`note.mjs new` 落点为容器根（`dawn`/`work`/`opensource`）时报错并列出可选目录；`work/<不存在的域>`、`opensource/<不存在的仓库>` 同样报错并列出真实清单（清单实时读 `projects/` 下的目录，新增自动生效）。`route` 命令会打印目录含义与 `⚠` 提示。
+**代码会拦截**：`note.mjs new` 落点为容器根（`dawn`/`work`/`opensource`）时报错并列出可选目录；`work/<不存在的域>`、`work/arch/<不存在的子项目>`、`opensource/<不存在的仓库>` 同样报错并列出真实清单（清单实时读 `projects/` 下的目录，新增自动生效）。`route` 命令会打印目录含义与 `⚠` 提示。
 
 **归档不走领域目录**：会话归档统一落在**顶层** `dsh-sessions/`，避免容器被原始素材污染；会话归属（`dawn/pop`、`work/service`、`opensource/mcp`…）记在归档笔记 frontmatter 的 `domain` 字段里，可用它筛选/建 Dataview 视图。
 
@@ -174,11 +175,12 @@ ask_user_question("这条笔记放哪？",
 
 `scripts/sediment.mjs` 每天 23:00 由 systemd user timer 触发（见 `~/.config/systemd/user/dsh-sediment.timer`）：
 
-1. 扫描 `~/.dsh/storages/session_projcache/sessions/*.json`，取时间窗内有活动的会话（含 `turnOutline` 的每轮问答，不需要解压 transcript）；
-2. 拼成摘要喂给 `dsh headless` 精炼（挂 [patch/headless-notes-only.yml](patch/headless-notes-only.yml)，**禁掉全部工具**，防止会话里夹带的外部内容触发注入）；
-3. 有价值就写成 `dsh-sessions/YYYY-MM-DD <标题>.md`（知识库顶层归档区），领域记在 frontmatter 的 `domain`；模型判断没价值则输出 `SKIP` 跳过；
-4. 状态写在 `~/.local/state/obsidian-inbox/archived.json`（按会话记录已归档轮次），同一会话后续新增的轮次会**追加补记**而不是重复建档；
-5. **每次归档后自动重建入口页** `dsh-sessions/索引.md`（日期 / 领域 / 链接 / 会话 id 一览表 + 领域分布统计），`--reindex` 可单独重建。
+1. 扫描 `~/.dsh/storages/session_projcache/sessions/*.json`，取时间窗内有活动的会话；
+2. 拼摘要：优先用 `turnOutline`（每轮问答预览）；**老会话的投影可能为空或预览截断得极小**，此时自动回退解压 `~/.dsh/sessions/<slug>/<sid>/session.jsonl.zstd`，抽 `user/message` + `assistant/message` 的 text（跳过 reasoning）重建摘要，避免老会话被误判成"没内容"而漏归档；
+3. 拼成摘要喂给 `dsh headless` 精炼（挂 [patch/headless-notes-only.yml](patch/headless-notes-only.yml)，**禁掉全部工具**，防止会话里夹带的外部内容触发注入）；
+4. 有价值就写成 `dsh-sessions/YYYY-MM-DD <标题>.md`（知识库顶层归档区），领域记在 frontmatter 的 `domain`（如 `work/arch/app`）；模型判断没价值则输出 `SKIP` 跳过；
+5. 状态写在 `~/.local/state/obsidian-inbox/archived.json`（按会话记录已归档轮次），同一会话后续新增的轮次会**追加补记**而不是重复建档；
+6. **每次归档后自动重建入口页** `dsh-sessions/索引.md`（日期 / 领域 / 链接 / 会话 id 一览表 + 领域分布统计），`--reindex` 可单独重建。
 
 手动用法：
 

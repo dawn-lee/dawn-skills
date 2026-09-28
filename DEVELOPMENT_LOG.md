@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×10
-- dev-log: #1×11
-- obsidian-inbox: #2×10
-- skill 开发: #1×11, #2×10
+- 知识库: #2×11
+- dev-log: #1×12
+- obsidian-inbox: #2×11
+- skill 开发: #1×12, #2×11
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -108,6 +108,14 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/note.mjs - 修改, 新增 distill 子命令（--path/--into/--note）`
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 索引页新增「提炼」列与已提炼/待提炼统计`
 - `skills/obsidian-inbox/SKILL.md - 修改, 新增 D 节「提炼：把归档变成主题笔记」（三种归宿 + 命令 + 可删条件）`
+
+### （续）续记：arch 域下新增子项目层级；归档器支持读原始 transcript 兜底，救回老会话
+
+**改动文件**：
+- `skills/obsidian-inbox/config.json - 修改, catalogSources 增加 work/arch → projects/work/arch（子项目清单），routes 增加 projects/work/arch/<子项目> → work/arch/{1}，domainNotes 补 work/arch/app`
+- `skills/obsidian-inbox/scripts/lib.mjs - 修改, 分类校验升级为嵌套（isKnownNested / assertKnownCatalogEntry 逐级校验），assertDirReady 自动放行嵌套既定分类`
+- `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 新增 transcript 兜底：turnOutline 为空或预览过薄时解压 session.jsonl.zstd 抽 user/assistant text 重建摘要（跳过 reasoning）`
+- `skills/obsidian-inbox/SKILL.md - 修改, 路由表加子项目层，归档流程说明 transcript 兜底`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：
