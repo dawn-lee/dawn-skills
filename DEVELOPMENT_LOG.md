@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×8
-- dev-log: #1×9
-- obsidian-inbox: #2×8
-- skill 开发: #1×9, #2×8
+- 知识库: #2×9
+- dev-log: #1×10
+- obsidian-inbox: #2×9
+- skill 开发: #1×10, #2×9
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -94,6 +94,12 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/lib.mjs - 修改, companyDomains 泛化为 catalogEntries(cfg,domain)、unknown 校验与放行规则随之通用化；容器报错提示改为按容器列既定分类`
 - `skills/obsidian-inbox/scripts/note.mjs - 修改, route 输出改为通用 catalogEntries`
 - `skills/obsidian-inbox/SKILL.md - 修改, 目录约定改为三容器结构 + cwd 路由表 + 例外说明`
+
+### （续）续记：为归档区加自动索引页，回填 5 篇缺失的 domain
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 新增 buildArchiveIndex()/writeArchiveIndex()：每次归档后重建 dsh-sessions/索引.md（日期/领域/链接/会话 id + 领域分布统计），并新增 --reindex 只重建索引`
+- `skills/obsidian-inbox/SKILL.md - 修改, 说明索引页与 --reindex，明确归档区不是索引/成品区`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：

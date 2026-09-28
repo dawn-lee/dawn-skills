@@ -177,7 +177,8 @@ ask_user_question("这条笔记放哪？",
 1. 扫描 `~/.dsh/storages/session_projcache/sessions/*.json`，取时间窗内有活动的会话（含 `turnOutline` 的每轮问答，不需要解压 transcript）；
 2. 拼成摘要喂给 `dsh headless` 精炼（挂 [patch/headless-notes-only.yml](patch/headless-notes-only.yml)，**禁掉全部工具**，防止会话里夹带的外部内容触发注入）；
 3. 有价值就写成 `dsh-sessions/YYYY-MM-DD <标题>.md`（知识库顶层归档区），领域记在 frontmatter 的 `domain`；模型判断没价值则输出 `SKIP` 跳过；
-4. 状态写在 `~/.local/state/obsidian-inbox/archived.json`（按会话记录已归档轮次），同一会话后续新增的轮次会**追加补记**而不是重复建档。
+4. 状态写在 `~/.local/state/obsidian-inbox/archived.json`（按会话记录已归档轮次），同一会话后续新增的轮次会**追加补记**而不是重复建档；
+5. **每次归档后自动重建入口页** `dsh-sessions/索引.md`（日期 / 领域 / 链接 / 会话 id 一览表 + 领域分布统计），`--reindex` 可单独重建。
 
 手动用法：
 
@@ -188,14 +189,14 @@ ask_user_question("这条笔记放哪？",
 ./run-sediment.sh --no-llm             # 不调模型，直接落原始摘要
 ./run-sediment.sh --force              # 忽略 state 重新归档
 ./run-sediment.sh --min-chars 150      # 放宽"有效内容量"门槛，救回短而密的会话
+./run-sediment.sh --reindex            # 只重建 dsh-sessions/索引.md，不扫会话
 ```
 
 > 门槛 `minAssistantChars`（默认 300）统计的是 `turnOutline` 的**截断预览**长度，会把"轮次少但信息密度高"的会话误判成 trivial。补跑历史会话发现被跳过时，先看 `skipped` 里的 `chars`，再用 `--min-chars` 放宽后重跑。
-```
 
 日志：`~/.local/state/obsidian-inbox/sediment.log`；systemd 侧用 `systemctl --user status dsh-sediment` / `journalctl --user -u dsh-sediment`。
 
-归档笔记的定位是**原始素材**：真正成体系的知识，应该在读过之后用写通道整理成主题笔记（可以顺手把归档笔记里的内容提炼过去，再决定要不要删掉原始归档）。
+归档笔记的定位是**原始素材**，`dsh-sessions/` 不是索引也不是成品区：真正成体系的知识，应该在读过之后用写通道整理成主题笔记（可以顺手把归档笔记里的内容提炼过去，再决定要不要删掉原始归档）。要找归档，先看 `dsh-sessions/索引.md`，或搜标签 `#dsh/归档`。
 
 ---
 

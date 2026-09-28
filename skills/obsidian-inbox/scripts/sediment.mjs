@@ -21,6 +21,7 @@ import { homedir } from 'node:os';
 import {
   SKILL_DIR, STATE_DIR, loadConfig, routeDir, slugify, buildFrontmatter, atomicWrite,
   appendSection, vaultAbs, fmtTime, parseArgs, normalizeRel, listNoteIndex, sanitizeBodyLinks,
+  parseFrontmatter,
 } from './lib.mjs';
 
 const HOME = homedir();
@@ -333,6 +334,84 @@ function writeNote(cfg, s, note, prev, args) {
   return { status: 'created', notePath, domain, unclassified };
 }
 
+// ---------------------------------------------------------------- 归档索引
+
+const INDEX_NAME = '索引.md';
+
+/**
+ * 重建归档区入口页：把 `<archiveDir>/` 下所有归档笔记汇总成一张表。
+ * 每次归档后自动重建（也可 `--reindex` 单独跑），是人工维护以外的唯一入口。
+ */
+function buildArchiveIndex(cfg) {
+  const relDir = normalizeRel(cfg.archiveDir);
+  const absDir = join(cfg.vault, relDir);
+  let files;
+  try {
+    files = readdirSync(absDir).filter((f) => f.endsWith('.md') && f !== INDEX_NAME);
+  } catch {
+    return null;
+  }
+  const entries = files.map((f) => {
+    let raw = '';
+    try { raw = readFileSync(join(absDir, f), 'utf8'); } catch { /* 读不到就只留文件名 */ }
+    const { fields } = raw ? parseFrontmatter(raw) : { fields: {} };
+    const title = (raw.match(/^#\s+(.+)$/m) || [])[1];
+    return {
+      date: String(fields.date ?? '').slice(0, 10) || '未知',
+      domain: String(fields.domain ?? ''),
+      unclassified: String(fields.unclassified ?? '') === 'true',
+      session: String(fields.session ?? ''),
+      name: f.replace(/\.md$/, ''),
+      title: (title || f.replace(/\.md$/, '')).trim(),
+    };
+  });
+  entries.sort((a, b) => (a.date === b.date ? b.name.localeCompare(a.name) : (a.date < b.date ? 1 : -1)));
+
+  const counts = new Map();
+  for (const e of entries) {
+    const key = e.domain || '未标注';
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  const dist = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([d, n]) => `${d} ${n}`)
+    .join('、');
+  const pending = entries.filter((e) => e.unclassified || !e.domain).length;
+
+  const lines = [
+    buildFrontmatter({ type: 'index', source: 'dsh', updated: fmtTime(Date.now()), tags: ['dsh/归档', '索引'] }),
+    '',
+    '# DSH 会话归档索引',
+    '',
+    '> [!info] 这个目录是干什么的',
+    '> 每次会话结束后，`sediment.mjs` 会把该会话精炼成**一篇归档笔记**（背景 / 结论 / 关键步骤 / 注意事项 / 产出与引用），作为**原始素材**留底——目的是兜住"当时没意识到值得沉淀"的知识。',
+    '> 本页由脚本在每次归档后自动重建，**请勿手改**。',
+    '>',
+    '> **推荐用法**：读归档 → 提炼成主题笔记放进 `dawn/`、`work/`、`opensource/` 对应目录 → 归档本身可以删。归档不是索引、也不是成品笔记。',
+    '',
+    `共 **${entries.length}** 篇归档${pending ? `，其中 **${pending}** 篇未归类（待补 \`domain\`）` : ''}。`,
+    '',
+    `按领域分布：${dist || '（暂无）'}`,
+    '',
+    '| 日期 | 领域 | 归档笔记 | 会话 id |',
+    '|---|---|---|---|',
+  ];
+  for (const e of entries) {
+    const dom = e.domain ? `${e.domain}${e.unclassified ? ' ⚠' : ''}` : '⚠未标注';
+    lines.push(`| ${e.date} | ${dom} | [[${e.name}\\|${e.title}]] | \`${e.session || '-'}\` |`);
+  }
+  lines.push('');
+  return { content: lines.join('\n'), count: entries.length, pending, path: `${relDir}/${INDEX_NAME}` };
+}
+
+function writeArchiveIndex(cfg, { quiet } = {}) {
+  const built = buildArchiveIndex(cfg);
+  if (!built) return null;
+  atomicWrite(vaultAbs(cfg, built.path), built.content);
+  if (!quiet) log(`索引已重建：${built.path}（${built.count} 篇${built.pending ? `，${built.pending} 篇待归类` : ''}）`);
+  return built;
+}
+
 // ---------------------------------------------------------------- 主流程
 
 const args = parseArgs(process.argv.slice(2));
@@ -346,6 +425,13 @@ const quiet = args.quiet === true;
 const limit = Number(args.limit) > 0 ? Number(args.limit) : Infinity;
 
 mkdirSync(WORK_DIR, { recursive: true });
+
+// --reindex：只重建归档索引页，不扫描/不调用模型
+if (args.reindex === true) {
+  const built = writeArchiveIndex(cfg, { quiet });
+  process.stdout.write(`${JSON.stringify({ ok: Boolean(built), mode: 'reindex', ...(built ?? {}) }, null, 2)}\n`);
+  process.exit(0);
+}
 
 const candidates = collectSessions(cfg, win, args);
 const result = {
@@ -447,11 +533,18 @@ state.runs.push({
 });
 saveState(state);
 
+// 每次归档后重建入口页（dry-run 不动文件）
+if (!dryRun) {
+  const built = writeArchiveIndex(cfg, { quiet });
+  if (built) result.index = { path: built.path, count: built.count, pending: built.pending };
+}
+
 process.stdout.write(`${JSON.stringify(args.json === true ? result : {
   ok: result.ok,
   window: result.window,
   mode: result.mode,
   scanned: result.scanned,
+  index: result.index,
   created: result.created.map((x) => x.notePath || x.id),
   appended: result.appended.map((x) => x.notePath || x.id),
   skipped: result.skipped,
