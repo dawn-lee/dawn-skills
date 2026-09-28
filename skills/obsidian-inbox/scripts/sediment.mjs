@@ -367,6 +367,9 @@ if (needLlm) {
 
 let processed = 0;
 const inventory = dryRun ? '' : buildInventory(cfg);
+// 有效内容量指标读的是 turnOutline 的**截断预览**，短而密的会话会被低估；
+// 手动补跑时可用 --min-chars 放宽（默认取 config.minAssistantChars）。
+const minChars = Number(args['min-chars']) > 0 ? Number(args['min-chars']) : (Number(cfg.minAssistantChars) || 300);
 for (const s of candidates) {
   if (processed >= limit) break;
   const prev = state.sessions[s.id];
@@ -376,7 +379,7 @@ for (const s of candidates) {
   if (prev && !force && !isUpdate) { result.skipped.push({ id: s.id, reason: 'unchanged' }); continue; }
   if (s.blank || !s.turns.length) { result.skipped.push({ id: s.id, reason: 'blank' }); continue; }
   const chars = substanceOf(s);
-  if (chars < (Number(cfg.minAssistantChars) || 300)) {
+  if (chars < minChars) {
     result.skipped.push({ id: s.id, reason: 'trivial', chars });
     continue;
   }

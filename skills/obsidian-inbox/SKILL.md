@@ -82,7 +82,9 @@ node scripts/note.mjs route --cwd "$PWD"
 
 判定顺序：先在已有目录里找匹配（`pop` 管系统、`docker` 管容器、`work/<域>` 管业务域）→ 都不匹配才**按主题新建**（如 `dawn/性能调优`）→ 实在拿不准就问用户，**不要往容器根写**。
 
-`--dir` 缺省时按会话 cwd 自动路由（见 `config.json` 的 `routes`，第一条匹配生效，支持 `{1}` 捕获组）：`projects/work/<域>/**` → `work/<域>`，`projects/work` 本身 → `work`，`projects/opensource/forks/**` → `dawn`，其余 `opensource/**` → `work`，`projects/dawn/**` 与兜底 → `dawn`。
+`--dir` 缺省时按会话 cwd 自动路由（见 `config.json` 的 `routes`，第一条匹配生效，支持 `{1}` 捕获组）：`projects/work/<域>/**` → `work/<域>`，`projects/work` 本身 → `work`，`projects/opensource/agentscope-java/**` → `work/arch`（下载的调研源码跟随调研主题），`projects/opensource/forks/**` → `dawn`（个人 fork），其余 `opensource/**` → `work`（尚未明确归属，会落"待归类"），`projects/dawn/**` 与兜底 → `dawn`。
+
+> 下载第三方源码做技术调研时，**源码目录 ≠ 归属**：归属应跟随调研主题（如 AgentScope 调研归 `work/arch`）。遇到未登记的新调研仓库，问用户后补一条路由。
 
 **代码会拦截**：`note.mjs new` 落点为容器根（`dawn`/`work`）时报错并列出可选目录；`work/<不存在的域>` 也会报错并列出真实域清单（域清单实时读 `~/Documents/projects/work/`，新增域自动生效）。`route` 命令会打印目录含义与 `⚠` 提示。
 
@@ -172,6 +174,10 @@ ask_user_question("这条笔记放哪？",
 ./run-sediment.sh --session session-xxx  # 只处理某个会话
 ./run-sediment.sh --no-llm             # 不调模型，直接落原始摘要
 ./run-sediment.sh --force              # 忽略 state 重新归档
+./run-sediment.sh --min-chars 150      # 放宽"有效内容量"门槛，救回短而密的会话
+```
+
+> 门槛 `minAssistantChars`（默认 300）统计的是 `turnOutline` 的**截断预览**长度，会把"轮次少但信息密度高"的会话误判成 trivial。补跑历史会话发现被跳过时，先看 `skipped` 里的 `chars`，再用 `--min-chars` 放宽后重跑。
 ```
 
 日志：`~/.local/state/obsidian-inbox/sediment.log`；systemd 侧用 `systemctl --user status dsh-sediment` / `journalctl --user -u dsh-sediment`。
