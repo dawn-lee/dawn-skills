@@ -191,6 +191,7 @@ export function buildFrontmatter(fields) {
   const lines = ['---'];
   for (const [k, v] of Object.entries(fields)) {
     if (v === undefined || v === null || v === '') continue;
+    if (typeof v === 'boolean') { lines.push(`${k}: ${v}`); continue; }
     if (Array.isArray(v)) {
       const items = v.filter((x) => x !== undefined && x !== null && String(x) !== '');
       if (!items.length) continue;

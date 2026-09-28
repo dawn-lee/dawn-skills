@@ -88,6 +88,21 @@ node scripts/note.mjs route --cwd "$PWD"
 
 **归档不走领域目录**：会话归档统一落在**顶层** `dsh-sessions/`，避免 `dawn/`、`work/` 被原始素材污染；会话归属的领域（`dawn/pop`、`work/service`…）记在归档笔记 frontmatter 的 `domain` 字段里，可用它筛选/建 Dataview 视图。
 
+### 拿不准就问，不要猜
+
+会话 cwd 能反推领域时（如 `projects/work/service/**`）直接路由，不用问。但下面两种情况**必须主动问用户**，不要为了"看起来合理"随手挑一个：
+
+- cwd 给不出信息（典型：`~/.dsh/workspace`、`/tmp`），而内容明显属于内部业务 → 用 `ask_user_question` 把 `companyDomains()` 的真实域清单列成选项让用户选；
+- 需要新建主题子目录、但主题边界不清楚（比如该进 `dawn/pop` 还是新建 `dawn/性能调优`）。
+
+问的时候带上可选值，例如：
+```
+node scripts/note.mjs route --json | 读 companyDomains
+→ ask_user_question: "这条笔记属于哪个域？" 选项 work/service、work/ops、work/arch…
+```
+
+归档是无人值守的，问不了人：当域只能落到容器根（`dawn` / `work`）时，笔记会写 `unclassified: true` 并打上 `dsh/待归类` 标签。事后用标签视图或 `note.mjs search --query 待归类` 捞出来，确认域之后改掉 `domain`、删掉标签即可。
+
 ### 笔记格式
 
 `new` 会自动生成 frontmatter（`type / source / session / domain / project / cwd / date / updated / tags`），正文由你写，按内容取舍下面这些小节：

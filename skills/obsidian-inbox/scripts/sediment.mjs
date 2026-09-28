@@ -303,31 +303,34 @@ function writeNote(cfg, s, note, prev, args) {
   }
   const absPath = vaultAbs(cfg, notePath);
   const exists = existsSync(absPath);
+  // 领域只落到容器根（dawn / work）说明没归到具体域：打标记，等人工或后续会话确认后改成真实域
+  const unclassified = !domain || cfg.domainRoots.includes(domain);
 
   if (exists) {
     appendSection(absPath, `${dateStr} 追加`, note.body);
-    return { status: 'appended', notePath, domain };
+    return { status: 'appended', notePath, domain, unclassified };
   }
 
   const meta = [
     '> [!info] 会话归档',
     `> \`${s.id}\` ｜ ${fmtTime(s.createdAt)} → ${fmtTime(s.lastPromptAt)} ｜ ${s.model || '未知模型'}`
-    + ` ｜ 领域 \`${domain || '(未归类)'}\` ｜ \`${s.cwd}\``,
+    + ` ｜ 领域 \`${domain || '未归类'}\`${unclassified ? '（待归类）' : ''} ｜ \`${s.cwd}\``,
   ].join('\n');
   const fm = buildFrontmatter({
     type: 'session',
     source: 'dsh',
     session: s.id,
     domain: domain || undefined,
+    unclassified: unclassified || undefined,
     project: basename(s.cwd || ''),
     cwd: s.cwd,
     model: s.model || undefined,
     date: dateStr,
     updated: fmtTime(Date.now()),
-    tags: ['dsh/归档', ...note.tags.filter((t) => t !== 'dsh/归档')],
+    tags: ['dsh/归档', ...(unclassified ? ['dsh/待归类'] : []), ...note.tags.filter((t) => t !== 'dsh/归档')],
   });
   atomicWrite(absPath, `${fm}\n\n# ${note.title}\n\n${meta}\n\n${note.body}\n`);
-  return { status: 'created', notePath, domain };
+  return { status: 'created', notePath, domain, unclassified };
 }
 
 // ---------------------------------------------------------------- 主流程

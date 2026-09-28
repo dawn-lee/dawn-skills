@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×4
-- dev-log: #1×5
-- obsidian-inbox: #2×4
-- skill 开发: #1×5, #2×4
+- 知识库: #2×5
+- dev-log: #1×6
+- obsidian-inbox: #2×5
+- skill 开发: #1×6, #2×5
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -65,6 +65,13 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/lib.mjs - 修改, routeDir 支持 {n} 捕获组、新增 companyDomains()（实时读 projects/work）与 assertKnownCompanyDomain()、assertNoteDir 提示改为业务域清单`
 - `skills/obsidian-inbox/scripts/note.mjs - 修改, route 输出目录含义/业务域清单/容器告警`
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 归档路径改为顶层 archiveDir，领域写进 frontmatter 的 domain 字段与 callout`
+
+### （续）续记：域不确定时改为主动询问用户；无人值守归档打「待归类」标记
+
+**改动文件**：
+- `skills/obsidian-inbox/SKILL.md - 修改, 新增「拿不准就问，不要猜」小节（含 ask_user_question 用法与待归类标签说明）`
+- `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 域只落到容器根时写 unclassified: true 与 dsh/待归类 标签，callout 标注待归类`
+- `skills/obsidian-inbox/scripts/lib.mjs - 修改, buildFrontmatter 支持布尔值（此前被引号包成字符串，Obsidian 属性变文本）`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：
