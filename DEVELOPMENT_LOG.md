@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×9
-- dev-log: #1×10
-- obsidian-inbox: #2×9
-- skill 开发: #1×10, #2×9
+- 知识库: #2×10
+- dev-log: #1×11
+- obsidian-inbox: #2×10
+- skill 开发: #1×11, #2×10
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -100,6 +100,14 @@ skill 开发, obsidian-inbox, 知识库
 **改动文件**：
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 新增 buildArchiveIndex()/writeArchiveIndex()：每次归档后重建 dsh-sessions/索引.md（日期/领域/链接/会话 id + 领域分布统计），并新增 --reindex 只重建索引`
 - `skills/obsidian-inbox/SKILL.md - 修改, 说明索引页与 --reindex，明确归档区不是索引/成品区`
+
+### （续）续记：补上「提炼」环节（归档 → 主题笔记）并首次全量执行
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/lib.mjs - 修改, 新增 markDistilled()：把 distilled/distilled_into/distilled_note/distilled_at 写进归档 frontmatter，幂等且只动 frontmatter`
+- `skills/obsidian-inbox/scripts/note.mjs - 修改, 新增 distill 子命令（--path/--into/--note）`
+- `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 索引页新增「提炼」列与已提炼/待提炼统计`
+- `skills/obsidian-inbox/SKILL.md - 修改, 新增 D 节「提炼：把归档变成主题笔记」（三种归宿 + 命令 + 可删条件）`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：

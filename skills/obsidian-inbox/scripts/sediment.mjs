@@ -361,6 +361,7 @@ function buildArchiveIndex(cfg) {
       domain: String(fields.domain ?? ''),
       unclassified: String(fields.unclassified ?? '') === 'true',
       session: String(fields.session ?? ''),
+      distilledInto: String(fields.distilled_into ?? ''),
       name: f.replace(/\.md$/, ''),
       title: (title || f.replace(/\.md$/, '')).trim(),
     };
@@ -377,6 +378,7 @@ function buildArchiveIndex(cfg) {
     .map(([d, n]) => `${d} ${n}`)
     .join('、');
   const pending = entries.filter((e) => e.unclassified || !e.domain).length;
+  const distilled = entries.filter((e) => e.distilledInto).length;
 
   const lines = [
     buildFrontmatter({ type: 'index', source: 'dsh', updated: fmtTime(Date.now()), tags: ['dsh/归档', '索引'] }),
@@ -389,16 +391,18 @@ function buildArchiveIndex(cfg) {
     '>',
     '> **推荐用法**：读归档 → 提炼成主题笔记放进 `dawn/`、`work/`、`opensource/` 对应目录 → 归档本身可以删。归档不是索引、也不是成品笔记。',
     '',
-    `共 **${entries.length}** 篇归档${pending ? `，其中 **${pending}** 篇未归类（待补 \`domain\`）` : ''}。`,
+    `共 **${entries.length}** 篇归档：**已提炼 ${distilled}** 篇、待提炼 ${entries.length - distilled} 篇`
+    + `${pending ? `；另有 ${pending} 篇未归类（待补 \`domain\`）` : ''}。`,
     '',
     `按领域分布：${dist || '（暂无）'}`,
     '',
-    '| 日期 | 领域 | 归档笔记 | 会话 id |',
-    '|---|---|---|---|',
+    '| 日期 | 领域 | 归档笔记 | 提炼 | 会话 id |',
+    '|---|---|---|---|---|',
   ];
   for (const e of entries) {
     const dom = e.domain ? `${e.domain}${e.unclassified ? ' ⚠' : ''}` : '⚠未标注';
-    lines.push(`| ${e.date} | ${dom} | [[${e.name}\\|${e.title}]] | \`${e.session || '-'}\` |`);
+    const dis = e.distilledInto ? `✅ ${e.distilledInto}` : '⏳ 待提炼';
+    lines.push(`| ${e.date} | ${dom} | [[${e.name}\\|${e.title}]] | ${dis} | \`${e.session || '-'}\` |`);
   }
   lines.push('');
   return { content: lines.join('\n'), count: entries.length, pending, path: `${relDir}/${INDEX_NAME}` };

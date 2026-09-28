@@ -9,6 +9,7 @@
  *   node scripts/note.mjs search --query "关键词" [--limit 10] [--json]
  *   node scripts/note.mjs show   --path "dawn/x.md" [--json]
  *   node scripts/note.mjs route  --cwd /abs/path [--json]
+ *   node scripts/note.mjs distill --path "dsh-sessions/x.md" --into "[[主题笔记]]" [--note 说明] [--json]
  *
  * 退出码：0 成功 / 2 用法错误 / 3 目标已存在（需 --append 或 --force） / 4 未找到
  */
@@ -18,6 +19,7 @@ import {
   loadConfig, routeDir, slugify, buildFrontmatter, atomicWrite, readNote,
   searchNotes, findExistingByTitle, appendSection, vaultAbs, fmtTime, parseArgs,
   readBodyArg, normalizeRel, assertNoteDir, listSubdirs, catalogEntries, assertDirReady,
+  markDistilled,
 } from './lib.mjs';
 
 // 下游提前关管道（如 `| head -1`）时安静退出，不要抛 EPIPE 栈
@@ -28,7 +30,8 @@ const USAGE = `用法：
   note.mjs append --path P [--section S] [--body-file -] [--json]
   note.mjs search --query Q [--limit N] [--json]
   note.mjs show --path P [--json]
-  note.mjs route --cwd P [--json]`;
+  note.mjs route --cwd P [--json]
+  note.mjs distill --path "dsh-sessions/归档.md" --into "[[主题笔记]]" [--note 说明] [--json]`;
 
 function fail(code, message, extra = {}) {
   process.stdout.write(`${JSON.stringify({ ok: false, error: message, ...extra }, null, 2)}\n`);
@@ -56,7 +59,9 @@ try {
     process.stdout.write(`${USAGE}\n`);
     process.exit(0);
   }
-  const handlers = { new: cmdNew, append: cmdAppend, search: cmdSearch, show: cmdShow, route: cmdRoute };
+  const handlers = {
+    new: cmdNew, append: cmdAppend, search: cmdSearch, show: cmdShow, route: cmdRoute, distill: cmdDistill,
+  };
   const handler = handlers[cmd];
   if (!handler) {
     process.stdout.write(`${USAGE}\n`);
@@ -154,6 +159,22 @@ function cmdShow() {
     return;
   }
   process.stdout.write(note.raw);
+}
+
+function cmdDistill() {
+  if (typeof args.path !== 'string') fail(2, 'distill 需要 --path（归档笔记）');
+  const absPath = vaultAbs(cfg, args.path);
+  if (!existsSync(absPath)) fail(4, `笔记不存在：${args.path}`);
+  if (typeof args.into !== 'string' || !args.into.trim()) {
+    fail(2, 'distill 需要 --into（提炼到的主题笔记，如 "[[输入法问题]]"）');
+  }
+  const res = markDistilled(cfg, args.path, {
+    into: args.into.trim(),
+    note: typeof args.note === 'string' ? args.note : '',
+  });
+  process.stdout.write(json
+    ? `${JSON.stringify({ ok: true, ...res }, null, 2)}\n`
+    : `${res.path} → 已标记提炼到 ${res.into}\n`);
 }
 
 function cmdRoute() {

@@ -422,6 +422,27 @@ export function sanitizeBodyLinks(cfg, body) {
   );
 }
 
+/**
+ * 标记归档笔记"已提炼"：写上 `distilled / distilled_into / distilled_at`，
+ * 让「归档 → 主题笔记」这一环可追踪，索引页据此统计积压。
+ * 只动 frontmatter，不改正文；重复调用是幂等的。
+ */
+export function markDistilled(cfg, relPath, { into, note = '' } = {}) {
+  const absPath = vaultAbs(cfg, relPath);
+  const raw = readFileSync(absPath, 'utf8');
+  const { fields, body } = parseFrontmatter(raw);
+  const merged = {
+    ...fields,
+    distilled: true,
+    distilled_into: into || undefined,
+    distilled_note: note || undefined,
+    distilled_at: fmtTime(Date.now()),
+  };
+  const content = `${buildFrontmatter(merged)}\n\n${body.replace(/^\n+/, '')}`;
+  atomicWrite(absPath, content.endsWith('\n') ? content : `${content}\n`);
+  return { path: normalizeRel(relPath), into, note };
+}
+
 export function fmtTime(ms, withTime = true) {
   if (!ms) return '';
   const d = new Date(Number(ms));
