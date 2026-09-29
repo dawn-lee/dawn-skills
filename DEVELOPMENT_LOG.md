@@ -230,6 +230,9 @@ skill 开发, obsidian-inbox, 知识库
 - 9 项临时副本测试全过：续记含摘要/问题/commit、默认挂最新段不动旧段、--section 精确替换、Session #1 单段回归、新建条目回归、index、--section 0 段与 13 段均报错退出1
 - 此前为 20 个历史段手工插入 commit 行属临时手段，脚本修好后不再需要
 
+**commit**：5a9680b
+
+
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：
