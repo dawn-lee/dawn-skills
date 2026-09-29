@@ -6,12 +6,56 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×22
-- dev-log: #1×23
-- obsidian-inbox: #2×22
-- skill 开发: #1×23, #2×22
+- 跨平台: #3×3
+- 知识库: #2×25, #3×3
+- dev-log: #1×26
+- obsidian-inbox: #2×25, #3×3
+- skill 开发: #1×26, #2×25, #3×3
 
 ---
+## Session #3 - 2026-09-29 16:35
+
+**需求**：
+把 obsidian-inbox 从「本机私有」改造成可分发的通用技能：换电脑 clone 后跑 init + install 即可用
+
+**主题**：
+obsidian-inbox, skill 开发, 知识库, 跨平台
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/lib.mjs - 修改, 配置查找解耦（OBSIDIAN_INBOX_CONFIG/技能目录/XDG）+ ${HOME} 展开（vault/catalogSources/routes/excludeCwdPrefixes，路由正则只转义替换进去的家目录）+ 跨平台路径归一 + 提取 whichSync/resolveDshBin/dshHome/dshProjcacheRoot`
+- `skills/obsidian-inbox/scripts/init.mjs - 新增, 探测知识库与项目目录生成本机配置（simple|projects 预设、--print/--force/--no-dir），路径一律写 ${HOME}`
+- `skills/obsidian-inbox/scripts/install.mjs - 新增, 软链或复制接入 ~/.agents/skills + 自动 init + 三平台调度注册（systemd/launchd/schtasks）+ --status/--uninstall/--dry-run`
+- `skills/obsidian-inbox/templates - 新增, systemd service/timer、launchd plist、Windows 计划任务 XML 三套调度模板`
+- `skills/obsidian-inbox/config.example.json - 新增, 配置模板与逐字段说明`
+- `skills/obsidian-inbox/config.json - 删除, 含私有家目录与业务域清单，移出版本库并 gitignore（本机文件保留）`
+- `skills/obsidian-inbox/scripts/sediment.mjs - 修改, llm.patch 可配 + 补丁缺失告警、去掉写死的 dawn/work/opensource 措辞、复用 resolveDshBin、DSH_HOME 可覆盖、配置错误可读化`
+- `skills/obsidian-inbox/scripts/note.mjs - 修改, 配置缺失给可读提示（exit 2）而非 ESM 堆栈、无子命令先打印用法、USAGE 补 init/install`
+- `skills/obsidian-inbox/run-sediment.sh - 修改, node 定位扩到 nvm/asdf/fnm/volta/mise/Homebrew/opt，支持 OBSIDIAN_INBOX_NODE`
+- `skills/obsidian-inbox/patch/headless-notes-only.yml - 修改, 头部说明 provider/密钥/模型为示例、换机须改或另存后用 llm.patch 指定`
+- `skills/obsidian-inbox/SKILL.md - 修改, 新增「0. 安装与本机配置」节与环境变量表，容器目录表标注为 projects 预设的本机实例，定时归档改三平台表述`
+- `README.md - 修改, 技能表与目录树补 init/install/templates，新增 obsidian-inbox 配置章节`
+- `.gitignore - 修改, 忽略 skills/obsidian-inbox/config.json`
+
+**变更摘要**：
+技能代码层本就零依赖、已用 homedir()/XDG，真正的移植障碍在配置与调度：config.json 全是 ~ 绝对路径且被 git 跟踪推送，目录体系（dawn/work/opensource + 业务域）是本机私有，定时归档是 systemd-only 且 unit 不在仓库里，补丁绑定本机 provider/密钥。本次把三块都拆开：① 配置与代码分离——config.json 移出版本库（git rm --cached + gitignore），新增 config.example.json；配置查找顺序为 OBSIDIAN_INBOX_CONFIG → 技能目录 config.json → XDG，缺失时报错直接给出 init 命令；所有路径用 ${HOME} 占位，路由正则只对替换进去的家目录做正则转义（保留用户写的捕获组）。② 新增 init.mjs——探测含 .obsidian 的知识库与 ~/Documents/projects 下的容器，生成配置并建好容器/默认目录；simple 预设（notes/ 自由分层）与 projects 预设（镜像 <projectsRoot>/<容器>/<项目>，自动生成 domainRoots/catalogSources/strictCatalog/routes），本机现有三容器语义可用 --preset projects --soft dawn --default-dir dawn 完整复现。③ 新增 install.mjs——软链（Windows 无权限时 --copy 复制）接入 ~/.agents/skills，配置缺失时自动跑 init（透传 --preset/--vault/--projects-root），按平台注册调度：systemd user timer、launchd LaunchAgent、Windows 计划任务 XML，并把 node 绝对路径与 DSH_BIN 写进 unit/plist（非登录环境 PATH 极简）；无 systemd 的 Linux 打印 cron 行不擅自改 crontab；另有 --status 自检与 --uninstall。安全侧保持：归档仍走 no-tools 补丁，补丁可被 llm.patch 覆盖，缺失时显式告警。已在临时目录端到端验证：新机 init（simple/projects 两预设）、${HOME} 占位展开、严格容器拦截、容器根拦截、缺配置提示、复制安装自带配置可独立运行；本机 systemd unit 已由新模板重写并通过 systemd-analyze verify、is-enabled/is-active 与最小环境 dry-run。
+
+**遇到的问题**：
+- config.json 已被 git 跟踪并推送，等于把家目录路径与业务域清单分发给别人：git rm --cached + .gitignore 处理，本机文件保留、旧格式（写死绝对路径）仍兼容
+- 新机器上缺配置时，note.mjs/sediment.mjs 会在模块顶层抛 loadConfig 异常、甩出 ESM 堆栈：改为 try 内加载并给可读提示（exit 2），无子命令时先打印用法不要求配置
+- systemd 用户实例的 PATH 里没有 nvm，直接用 node 会找不到：install 把 node 绝对路径与 DSH_BIN 写进 unit，已用 env -i 最小环境跑 dry-run 验证
+- Windows 建软链需开发者模式/管理员：symlink 抛 EPERM 时自动退回复制（cpSync，filter 排除 .git/node_modules/.trash）
+- 安装位置已存在真实目录（npx skills add 的副本）时，调度若指向克隆的源码会造成「改了不生效」：改为沿用该副本并把 skillDir 指向它
+- macOS/Windows 分支只能按各平台接口实现，当前 Linux 环境无法实测，已在文档注明
+
+---
+
+
+### （续）续记：init.mjs 增加 --from-config，把旧机器配置一键迁移成 ${HOME} 占位格式（面向同一个人的第二台机器）。只改写确实含路径的字段 vault/catalogSources/routes/excludeCwdPrefixes，domainNotes 等说明文字原样保留，因此手写调过的主题目录登记与 agentscope-java→work/arch 这类路由例外都不会丢。过程中修掉两个真 bug：① 迁移路由 pattern 时误用 resolve()，把正则当成相对路径拼上了 cwd（pattern 变成 <技能目录>/^~/...），改为对家目录的三种写法（/ 分隔、Windows 原样、Windows 正则双反斜杠）做纯字符串替换；② 写盘前校验知识库是否存在时只调了 expandHome（不认 ${HOME}），迁移出的配置被判成 vault 不存在，改用 expandVars。已用本机真实配置验证：迁移后 vault/catalogSources/excludeCwdPrefixes/9 条路由 pattern 全部正确，work/arch/app、dawn/dawn-skills、opensource/mcp、agentscope-java→work/arch 四条落位与原配置一致。另：测试中 init 的自动探测曾在真实知识库里建出空的 notes/、opensource/ 目录，确认无内容后已删除复原。
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/init.mjs - 修改, 新增 --from-config 配置迁移 + toHomeToken（正则文本用字符串替换、不走 resolve）+ 写盘前用 expandVars 解析 ${HOME} 校验知识库存在`
+- `skills/obsidian-inbox/scripts/install.mjs - 修改, init 参数透传补 from-config`
+- `skills/obsidian-inbox/SKILL.md - 修改, 安装章节补 --from-config 用法与适用场景`
 ## Session #2 - 2026-09-28 11:04
 
 **需求**：
@@ -101,7 +145,7 @@ skill 开发, obsidian-inbox, 知识库
 
 **commit**：5b79f23
 
-### （续）续记：新增 opensource 第三容器（第三方开源项目既非业务也非个人），普通化分类清单配置
+### （续）续记：新增 opensource 第三容器（第三方开源项目既非工作也非个人），普通化分类清单配置
 
 **改动文件**：
 - `skills/obsidian-inbox/config.json - 修改, domainRoots 增加 opensource；companyDomainSource 泛化为 catalogSources{work,opensource}；新增 opensource 路由（捕获仓库名）与 agentscope-java → work/arch 例外；domainNotes 补 opensource 各仓库说明`

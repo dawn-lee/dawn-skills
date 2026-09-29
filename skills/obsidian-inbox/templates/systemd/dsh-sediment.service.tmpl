@@ -1,0 +1,13 @@
+[Unit]
+Description=DSH → Obsidian 每日知识沉淀（obsidian-inbox）
+Documentation=file:{{SKILL_DIR}}/SKILL.md
+
+[Service]
+Type=oneshot
+WorkingDirectory={{SKILL_DIR}}
+# node 与脚本都用绝对路径：systemd 用户实例的 PATH 极简，靠 PATH 找不到 nvm/Homebrew 里的 node
+ExecStart={{NODE}} {{SKILL_DIR}}/scripts/sediment.mjs {{ARGS}}
+{{ENV_LINES}}
+TimeoutStartSec=1800
+Nice=10
+# 失败不影响下次触发；日志：journalctl --user -u dsh-sediment

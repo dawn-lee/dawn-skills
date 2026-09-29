@@ -10,12 +10,13 @@ import {
   renameSync, rmSync,
 } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { dirname, join, resolve, relative, basename, sep } from 'node:path';
+import { dirname, join, resolve, relative, basename, sep, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 
 export const SKILL_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-export const CONFIG_PATH = join(SKILL_DIR, 'config.json');
+/** 技能目录下的默认配置位置（本机私有，不随仓库分发，见 .gitignore）。 */
+export const DEFAULT_CONFIG_PATH = join(SKILL_DIR, 'config.json');
 /**
  * 运行期状态（归档账本、日志、headless 工作目录）**不放在技能源码里**，
  * 避免技能以软链方式接入 ~/.agents/skills 时把状态写进 git 工作区。
@@ -25,26 +26,114 @@ export const STATE_DIR = process.env.OBSIDIAN_INBOX_STATE
   ? resolve(process.env.OBSIDIAN_INBOX_STATE)
   : join(process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'obsidian-inbox');
 
+/** `$XDG_CONFIG_HOME` 下的共享配置位置（跨机同步/只读安装时用）。 */
+function xdgConfigPath() {
+  return join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'obsidian-inbox', 'config.json');
+}
+
+/**
+ * 配置查找顺序（第一个存在的生效）：
+ *   1. `$OBSIDIAN_INBOX_CONFIG` —— 显式指定；设了就**只认它**（找不到直接报错，不静默回退）
+ *   2. `<技能目录>/config.json` —— 默认，本机私有
+ *   3. `$XDG_CONFIG_HOME/obsidian-inbox/config.json`（或 `~/.config/...`）
+ * 三者都不存在时，报错会提示运行 `scripts/init.mjs` 生成。
+ */
+export function configCandidates() {
+  const explicit = process.env.OBSIDIAN_INBOX_CONFIG;
+  return explicit
+    ? [resolve(expandHome(explicit))]
+    : [DEFAULT_CONFIG_PATH, xdgConfigPath()];
+}
+
+export function resolveConfigPath() {
+  const list = configCandidates();
+  for (const p of list) if (existsSync(p)) return p;
+  return list[0];
+}
+
+/** 当前进程实际使用的配置路径（导入时解析一次）。 */
+export const CONFIG_PATH = resolveConfigPath();
+
 export function expandHome(p) {
   if (!p) return p;
   if (p === '~') return homedir();
-  if (p.startsWith('~/')) return join(homedir(), p.slice(2));
+  if (p.startsWith('~/') || p.startsWith('~\\')) return join(homedir(), p.slice(2));
   return p;
 }
 
+/**
+ * 展开配置里的 `${HOME}` / `$HOME`（再兼容 `~`）。
+ * 配置文件里**不要写死家目录**，否则换机器/换用户名必然失效。
+ */
+export function expandVars(p) {
+  if (typeof p !== 'string') return p;
+  return expandHome(p.replace(/\$\{HOME\}|\$HOME/g, homedir().replace(/\\/g, '/')));
+}
+
+function escapeRegExp(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * 展开路由正则里的 `${HOME}`：只替换占位符本身、并把带入的家目录**转义**，
+ * 其余部分仍是用户书写的正则（`([^/]+)` 这类捕获组必须保持原样，不能整体转义）。
+ * 路径统一成 `/` 分隔，兼容 Windows。
+ */
+export function expandRoutePattern(pattern) {
+  return String(pattern ?? '').replace(
+    /\$\{HOME\}|\$HOME/g,
+    escapeRegExp(homedir().replace(/\\/g, '/')),
+  );
+}
+
+function missingConfigError() {
+  const list = configCandidates().map((p) => `  - ${p}`).join('\n');
+  return new Error(
+    '找不到配置文件。请先运行一次初始化生成本机配置：\n'
+    + `  node ${join(SKILL_DIR, 'scripts', 'init.mjs')}\n`
+    + '或设置 OBSIDIAN_INBOX_CONFIG 指向已有配置。已查找：\n'
+    + list,
+  );
+}
+
 export function loadConfig() {
-  const raw = JSON.parse(readFileSync(CONFIG_PATH, 'utf8'));
-  const cfg = { ...raw };
-  cfg.vault = resolve(expandHome(cfg.vault));
-  cfg.defaultDir = cfg.defaultDir || 'dawn';
+  const path = resolveConfigPath();
+  if (!existsSync(path)) throw missingConfigError();
+  let raw;
+  try {
+    raw = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (err) {
+    throw new Error(`配置文件不是合法 JSON：${path}（${err?.message ?? err}）`);
+  }
+  const cfg = { ...raw, configPath: path };
+  if (typeof cfg.vault !== 'string' || !cfg.vault.trim()) {
+    throw new Error(`配置缺少 vault（知识库根目录）：${path}`);
+  }
+  cfg.vault = resolve(expandVars(cfg.vault));
+  cfg.defaultDir = normalizeRel(cfg.defaultDir ?? '');
   cfg.archiveDir = cfg.archiveDir ?? 'dsh-sessions';
-  cfg.routes = Array.isArray(cfg.routes) ? cfg.routes : [];
+  cfg.routes = (Array.isArray(raw.routes) ? raw.routes : [])
+    .filter((r) => r && typeof r.pattern === 'string')
+    .map((r) => ({
+      ...r,
+      pattern: expandRoutePattern(r.pattern),
+      dir: expandVars(String(r.dir ?? '')),
+    }));
   cfg.searchExclude = cfg.searchExclude || ['.obsidian', '.trash', '.smart-env', '.git'];
-  cfg.excludeCwdPrefixes = cfg.excludeCwdPrefixes || [];
-  cfg.domainRoots = (cfg.domainRoots || []).map((r) => normalizeRel(r));
+  // 统一成 `/` 分隔的绝对路径，跨平台与 cwd 前缀比较时不受分隔符影响
+  cfg.excludeCwdPrefixes = (cfg.excludeCwdPrefixes || [])
+    .map((p) => resolve(expandVars(String(p))).replace(/\\/g, '/'));
+  cfg.domainRoots = (cfg.domainRoots || []).map((r) => normalizeRel(r)).filter(Boolean);
+  // 严格容器清单完全由配置决定；缺省为空（"第二级必须对应真实目录"是可选约束）
+  cfg.strictCatalog = Array.isArray(cfg.strictCatalog) ? cfg.strictCatalog.map(normalizeRel) : [];
   cfg.domainNotes = cfg.domainNotes || {};
-  cfg.catalogSources = cfg.catalogSources || {};
-  if (!existsSync(cfg.vault)) throw new Error(`vault 不存在：${cfg.vault}`);
+  cfg.catalogSources = Object.fromEntries(
+    Object.entries(cfg.catalogSources || {}).map(([k, v]) => [
+      normalizeRel(k),
+      resolve(expandVars(String(v))),
+    ]),
+  );
+  if (!existsSync(cfg.vault)) throw new Error(`vault 不存在：${cfg.vault}（配置：${path}）`);
   return cfg;
 }
 
@@ -92,7 +181,8 @@ export function toVaultRel(cfg, p, { allowOutside = false } = {}) {
  *  路由的 dir 支持 `{1}`、`{2}` 占位，取正则捕获组（用于 `work/<域>` 这类动态落位）。 */
 export function routeDir(cfg, cwd, explicitDir) {
   if (explicitDir && explicitDir !== true) return toVaultRel(cfg, explicitDir);
-  const c = cwd ? resolve(expandHome(String(cwd))) : '';
+  // 统一 `/` 分隔再匹配：Windows 的 cwd 可能是 `C:\x`，配置里的 `${HOME}` 已归一为 `/`
+  const c = cwd ? resolve(expandVars(String(cwd))).replace(/\\/g, '/') : '';
   for (const r of cfg.routes) {
     let re;
     try { re = new RegExp(r.pattern); } catch { continue; }
@@ -118,11 +208,6 @@ export function catalogEntries(cfg, domain) {
   } catch {
     return [];
   }
-}
-
-/** 业务域清单（catalogEntries 在 work 上的别名，语义更直白）。 */
-export function companyDomains(cfg) {
-  return catalogEntries(cfg, 'work');
 }
 
 /** 判断 rel 是否是"既定分类"：每一级都命中上一级 catalogSources 里的真实子目录。 */
@@ -155,7 +240,7 @@ function assertKnownCatalogEntry(cfg, rel, source) {
     if (entries.includes(child)) continue;
     // 主题目录与项目清单并存（dawn/pop、dawn/知识库 不在 projects/dawn 下），domainNotes 已登记则放行
     if ((cfg.domainNotes ?? {})[`${parent}/${child}`]) continue;
-    const label = parent === 'work' ? '业务域' : parent === 'work/arch' ? 'arch 子项目' : `${parent} 的子项`;
+    const label = `${parent} 的直接子项`;
     const sanctioned = [...new Set([...entries, ...themeDirs(cfg, parent)])].sort();
     throw new Error(
       `${parent}/${child} 不是已知的${label}（来源：${source}）；`
@@ -188,9 +273,9 @@ export function assertNoteDir(cfg, relDir, source) {
   const rel = normalizeRel(relDir);
   if (!cfg.domainRoots.includes(rel)) {
     const head = rel.split('/')[0];
-    // 只有 strictCatalog（默认 work/opensource）才做"必须对应真实目录"的硬校验。
-    // dawn 是软校验：已知主题/项目目录直接放行，新主题目录留给 assertDirReady 用 --mkdir 放行
-    // （SKILL.md 约定"按主题新建如 dawn/性能调优 → 确认后加 --mkdir"，硬校验会让 --mkdir 失效）。
+    // 只有 strictCatalog 里登记的容器才做"第二级必须对应真实目录"的硬校验（清单来自配置）。
+    // 没登记的容器是软校验：已知主题/项目目录直接放行，新主题目录交给 assertDirReady
+    // 用 --mkdir 放行（否则"按主题新建目录"这条路会被硬校验堵死）。
     const strict = cfg.strictCatalog ?? [];
     if ((cfg.catalogSources ?? {})[head] && strict.includes(head)) {
       assertKnownCatalogEntry(cfg, rel, source);
@@ -202,7 +287,7 @@ export function assertNoteDir(cfg, relDir, source) {
     ? `应为：${entries.map((d) => `${rel}/${d}`).join('、')}`
     : (listSubdirs(cfg, rel).length
       ? `现有子目录：${listSubdirs(cfg, rel).join('、')}`
-      : '该容器还没有子目录，请先按主题建一个（如 容器下的主题目录）');
+      : `该容器还没有子目录，请先按主题在该容器下建一个（新建分类需 --mkdir 并向用户确认）`);
   throw new Error(`${rel} 是容器，不能直接把笔记放在根下（来源：${source}）；请指定下一级。${hint}`);
 }
 
@@ -461,18 +546,77 @@ export function sanitizeBodyLinks(cfg, body) {
  * 让「归档 → 主题笔记」这一环可追踪，索引页据此统计积压。
  * 只动 frontmatter，不改正文；重复调用是幂等的。
  */
+// ---------------------------------------------------------------- 可执行文件定位
+
+function statSyncSafe(p) {
+  try { return statSync(p); } catch { return null; }
+}
+
+/** 在 PATH 里找一个可执行文件（跨平台：用 path.delimiter 切分，Windows 兼容 .cmd/.exe 后缀探测）。 */
+export function whichSync(cmd) {
+  const exts = process.platform === 'win32' ? ['', '.cmd', '.exe', '.bat'] : [''];
+  for (const d of (process.env.PATH ?? '').split(delimiter).filter(Boolean)) {
+    for (const ext of exts) {
+      const p = join(d, `${cmd}${ext}`);
+      const st = statSyncSafe(p);
+      if (!st || !st.isFile()) continue;
+      if (process.platform === 'win32' || (st.mode & 0o111)) return p;
+    }
+  }
+  return null;
+}
+
+/**
+ * dsh 可执行文件：`$DSH_BIN`（或配置 llm.command）→ PATH → npx 缓存里最新的那个。
+ * npx 缓存在所有平台都在 `~/.npm/_npx`，是"没全局装 dsh"时最稳的兜底。
+ */
+export function resolveDshBin(cfg = {}) {
+  const explicit = process.env.DSH_BIN || cfg.llm?.command;
+  if (typeof explicit === 'string' && explicit && existsSync(explicit)) return explicit;
+  const onPath = whichSync('dsh');
+  if (onPath) return onPath;
+  const root = join(homedir(), '.npm', '_npx');
+  let best = null;
+  try {
+    for (const d of readdirSync(root)) {
+      const p = join(root, d, 'node_modules', '.bin', 'dsh');
+      if (!existsSync(p)) continue;
+      const m = statSyncSafe(p);
+      if (!best || (m?.mtimeMs ?? 0) > best.m) best = { p, m: m?.mtimeMs ?? 0 };
+    }
+  } catch { /* 无 npx 缓存 */ }
+  return best?.p ?? null;
+}
+
 // ---------------------------------------------------------------- 原始 transcript
 
-export const DSH_SESSIONS_ROOT = join(homedir(), '.dsh', 'sessions');
+/**
+ * DSH 的数据根目录（会话记录、投影缓存）。默认 `~/.dsh`，可用 `$DSH_HOME` 覆盖
+ * （DSH 装在非默认位置、或做隔离测试时用）。
+ */
+export function dshHome() {
+  return resolve(expandHome(process.env.DSH_HOME || join(homedir(), '.dsh')));
+}
+
+export function dshSessionsRoot() {
+  return join(dshHome(), 'sessions');
+}
+
+export function dshProjcacheRoot() {
+  return join(dshHome(), 'storages', 'session_projcache', 'sessions');
+}
+
+export const DSH_SESSIONS_ROOT = dshSessionsRoot();
 
 /**
  * 定位某会话的原始 transcript。文件名可能是 session.jsonl.zstd，也可能是带版本号的
  * session.v3.jsonl.zstd（同一会话可有多个），取最新写入的那个。
  */
 export function findTranscript(sid) {
+  const root = dshSessionsRoot();
   try {
-    for (const slug of readdirSync(DSH_SESSIONS_ROOT)) {
-      const dir = join(DSH_SESSIONS_ROOT, slug, sid);
+    for (const slug of readdirSync(root)) {
+      const dir = join(root, slug, sid);
       let cands = [];
       try { cands = readdirSync(dir).filter((f) => f.endsWith('.jsonl.zstd')); } catch { continue; }
       if (!cands.length) continue;

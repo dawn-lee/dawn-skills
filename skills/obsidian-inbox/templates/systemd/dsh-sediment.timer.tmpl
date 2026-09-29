@@ -1,0 +1,14 @@
+[Unit]
+Description=每天触发 DSH → Obsidian 知识沉淀
+Documentation=file:{{SKILL_DIR}}/SKILL.md
+
+[Timer]
+OnCalendar=*-*-* {{TIME}}:00
+# 机器关机/休眠错过触发点时，下次启动补跑一次
+Persistent=true
+# 随机延迟，避免和其他整点任务撞车
+RandomizedDelaySec=600
+Unit=dsh-sediment.service
+
+[Install]
+WantedBy=timers.target

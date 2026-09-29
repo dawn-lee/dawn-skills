@@ -12,7 +12,7 @@
 | **wan2.7-video-skill** | 基于wan2.7视频生成模型，支持文生视频、图生视频和视频续写 | `video_generation.py` `check_video_task_status.py` `file_to_oss.py` | `common.md` `video-generation.md` `prompt-guide.md` |
 | **dev-log** | 开发日志记录：读写双通道，写入靠 git 真值 + 脚本编号，读取靠头部主题索引，把 DEVELOPMENT_LOG.md 变成 LLM 可追溯的项目记忆库 | `dev-log.mjs` | - |
 | **db-sync** | 在数据库之间同步表数据，读取 DataGrip 配置自动发现数据源 | `db-sync.sh` | - |
-| **obsidian-inbox** | Obsidian 知识库沉淀：把会话中可复用的知识写进笔记库（自动 frontmatter、按 cwd 路由、写前查重），并提供检索通道；另含每日定时归档，把当天会话精炼成笔记落库 | `note.mjs` `sediment.mjs` | - |
+| **obsidian-inbox** | Obsidian 知识库沉淀：把会话中可复用的知识写进笔记库（自动 frontmatter、按 cwd 路由、写前查重），并提供检索通道；另含每日定时归档，把当天会话精炼成笔记落库。代码不含机器相关路径，换电脑跑一次 `init.mjs` + `install.mjs` 即可 | `note.mjs` `sediment.mjs` `init.mjs` `install.mjs` | - |
 
 将持续更新多种技能到技能列表。
 
@@ -44,6 +44,22 @@ git clone https://github.com/dawn-lee/dawn-skills.git
 ```
 
 > 安装 **dev-log** 或 **db-sync** 时，将上述命令/路径中的 `wan2.7-video-skill` 替换为对应技能名即可，二者无需 API Key。
+
+### 配置 obsidian-inbox（需要一次本机初始化）
+
+技能代码本身不含任何机器相关路径，clone 后跑两条命令即可（无需 API Key；归档精炼用你已有的 DSH 模型配置）：
+
+```bash
+cd dawn-skills/skills/obsidian-inbox
+node scripts/init.mjs            # 探测 Obsidian 知识库，生成 config.json（simple 预设）
+node scripts/init.mjs --preset projects   # 或镜像 ~/Documents/projects/<容器>/<项目> 结构
+node scripts/install.mjs         # 接入 ~/.agents/skills + 注册每日归档（systemd/launchd/计划任务）
+node scripts/install.mjs --status  # 自检
+```
+
+- 真实 `config.json` 含私有路径，**不入库**；模板见 `config.example.json`，配置里用 `${HOME}` 占位。
+- 归档补丁 `patch/headless-notes-only.yml` 里的 provider/密钥/模型是示例，需改成你自己的（或用配置项 `llm.patch` 指定）。
+- 其他环境变量（`OBSIDIAN_INBOX_CONFIG` / `OBSIDIAN_INBOX_STATE` / `DSH_HOME` / `DSH_BIN`）见技能内的 `SKILL.md`。
 
 ### 配置 wan2.7-video-skill（需要 API Key）
 
@@ -93,15 +109,21 @@ dawn-skills/
     │   └── scripts
     │       └── dev-log.mjs                     # 读写脚本（snapshot/add/index/link/query）
     ├── obsidian-inbox                          # Obsidian 知识库沉淀技能
-    │   ├── SKILL.md                            # 技能描述文件（读写通道 + 定时归档说明）
-    │   ├── config.json                         # 知识库路径、目录路由、摘要预算
-    │   ├── run-sediment.sh                     # 定时任务入口（解析 node/nvm 后执行归档）
+    │   ├── SKILL.md                            # 技能描述文件（安装/配置 + 读写通道 + 定时归档）
+    │   ├── config.example.json                 # 配置模板（真实 config.json 已 gitignore，不入库）
+    │   ├── run-sediment.sh                     # 手动/cron 入口（自解析 node 后执行归档）
     │   ├── patch
-    │   │   └── headless-notes-only.yml         # 归档运行时最小权限补丁（禁用全部工具）
+    │   │   └── headless-notes-only.yml         # 归档运行时最小权限补丁（禁用全部工具；模型段为示例）
+    │   ├── templates                           # 调度模板（install.mjs 渲染）
+    │   │   ├── systemd                         # linux：dsh-sediment.service/.timer
+    │   │   ├── launchd                         # macOS：com.dsh.obsidian-inbox.plist
+    │   │   └── windows                         # Windows：计划任务 XML
     │   └── scripts
-    │       ├── lib.mjs                         # 路由/frontmatter/原子写/检索
-    │       ├── note.mjs                        # 写/查通道（new/append/search/show/route）
-    │       └── sediment.mjs                    # 每日归档（会话 → 笔记）
+    │       ├── lib.mjs                         # 路由/frontmatter/原子写/检索/配置解析
+    │       ├── note.mjs                        # 写/查通道（new/append/search/show/route/distill/recover）
+    │       ├── sediment.mjs                    # 每日归档（会话 → 笔记）
+    │       ├── init.mjs                        # 生成本机配置（探测知识库/项目目录，支持 simple|projects 预设）
+    │       └── install.mjs                     # 接入 ~/.agents/skills + 注册三平台调度 + --status 自检
     └── wan2.7-video-skill                      # wan2.7视频生成技能
         ├── references
         │   ├── common.md                       # 通用配置文档

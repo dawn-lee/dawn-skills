@@ -7,14 +7,54 @@ description: 把可复用的知识沉淀进 Obsidian 知识库，也在动手前
 
 把会话里**可复用的知识**写成 Obsidian 笔记，落到知识库的现有领域目录里；同时提供检索通道，让历史笔记成为当前任务的上下文。
 
-- 知识库：`~/Documents/Obsidian Vault`（Flatpak Obsidian 常驻，外部写入会自动被索引）
-- 配置：[config.json](config.json)（vault 路径、目录路由、排除规则、摘要预算）
-- 脚本：[scripts/note.mjs](scripts/note.mjs)（写/查）、[scripts/sediment.mjs](scripts/sediment.mjs)（每日归档）
+- 知识库：由本机配置决定（当前这台机器是 `~/Documents/Obsidian Vault`；Obsidian 常驻，外部写入会自动被索引）
+- 配置：`config.json`（默认在技能目录；**已 gitignore、不随仓库分发**），模板见 [config.example.json](config.example.json)
+- 脚本：[scripts/note.mjs](scripts/note.mjs)（写/查）、[scripts/sediment.mjs](scripts/sediment.mjs)（每日归档）、
+  [scripts/init.mjs](scripts/init.mjs)（生成本机配置）、[scripts/install.mjs](scripts/install.mjs)（接入技能目录 + 注册调度 + 自检）
 - 运行期状态：`~/.local/state/obsidian-inbox/`（归档账本 `archived.json`、日志 `sediment.log`、headless 工作目录；**不在技能源码里**，可用 `OBSIDIAN_INBOX_STATE` 覆盖）
 
-> **源码与安装**：源码在 `dawn-skills` 仓库 `skills/obsidian-inbox/`（`~/Documents/projects/dawn/dawn-skills/skills/obsidian-inbox`），
-> `~/.agents/skills/obsidian-inbox` 是指向它的软链（`dsh-skill-filesystem` 会跟随符号链接发现技能）。
-> 在仓库里改代码即刻生效，不需要重新安装。
+---
+
+## 0. 安装与本机配置（换电脑先看这节）
+
+技能代码里**不含任何机器相关路径**，换电脑就是 clone + 两次命令：
+
+```bash
+git clone https://github.com/dawn-lee/dawn-skills.git ~/Documents/projects/dawn/dawn-skills
+cd ~/Documents/projects/dawn/dawn-skills/skills/obsidian-inbox
+
+node scripts/init.mjs                    # 探测知识库，生成 config.json（默认 simple 预设）
+node scripts/init.mjs --preset projects  # 镜像 ~/Documents/projects/<容器>/<项目> 的目录结构
+node scripts/init.mjs --from-config ~/old-config.json --force   # 迁移旧机器配置（家目录改写成 ${HOME}）
+node scripts/install.mjs                 # 软链到 ~/.agents/skills + 注册每日归档
+node scripts/install.mjs --status        # 自检：软链 / 配置 / 调度
+```
+
+> 你自己有多台机器时推荐 `--from-config`：把上一台的 config.json 带过来直接迁移，
+> 手写调过的 `domainNotes`（主题目录登记）和路由例外都能原样保留。
+
+- **源码与安装**：`~/.agents/skills/obsidian-inbox` 指向仓库源码的软链（`dsh-skill-filesystem` 会跟随符号链接发现技能）。
+  在仓库里改代码即刻生效，不需要重新安装；Windows 没有软链权限时用 `--copy` 复制安装。
+- **两个预设**：`simple`（默认，`notes/` 下按主题自由分层）与 `projects`（镜像 `<projectsRoot>/<容器>/<项目>`，
+  容器第二级必须对应真实项目目录，`--soft <容器>` 可让它改走 `--mkdir` 流程）。当前这台机器用的是
+  `projects` 预设 + 容器 `dawn`/`work`/`opensource`（见本机 config.json 的 `domainRoots`）。
+- **配置查找顺序**：`$OBSIDIAN_INBOX_CONFIG` → `<技能目录>/config.json` → `$XDG_CONFIG_HOME/obsidian-inbox/config.json`；
+  三者都没有时脚本会提示运行 `init.mjs`。配置里所有路径写 `${HOME}` 占位，**不要写死家目录**（`routes[].pattern` 同样支持）。
+- **调度**：`install.mjs` 按平台写 systemd user timer（linux）/ LaunchAgent（macOS）/ 计划任务（Windows），
+  并把 node 绝对路径写进 unit/plist —— 非登录环境 PATH 极简，靠 PATH 找不到 nvm / Homebrew 里的 node。
+  无 systemd 的 Linux（WSL1 等）会打印 cron 行让你自行添加，不擅自改 crontab。
+- **模型/密钥**：[patch/headless-notes-only.yml](patch/headless-notes-only.yml) 里的 provider、`VOLCENGINE_API_KEY`、
+  模型名都是**示例**，换机器要改成自己的；也可另存一份用配置项 `llm.patch` 指向（优先于内置补丁）。
+  补丁缺失时归档仍会跑，但 headless 默认策略下**工具是开启的**，脚本会告警。
+
+| 环境变量 | 作用 |
+|---|---|
+| `OBSIDIAN_INBOX_CONFIG` | 指定配置文件；设了就只认它，不再回退默认位置 |
+| `OBSIDIAN_INBOX_STATE` | 归档账本 / 日志 / 锁 / headless 工作目录（默认 `$XDG_STATE_HOME/obsidian-inbox`） |
+| `DSH_SKILLS_DIR` | `install.mjs` 接入技能目录（默认 `~/.agents/skills`） |
+| `DSH_HOME` | DSH 数据根（默认 `~/.dsh`）：会话扫描、transcript 解压都基于它 |
+| `DSH_BIN` | dsh 可执行文件；不设则按 PATH → `~/.npm/_npx` 缓存自动探测 |
+| `OBSIDIAN_INBOX_NODE` | `run-sediment.sh` 使用的 node 路径（找不到 node 时用） |
 
 ---
 
@@ -72,7 +112,11 @@ node scripts/note.mjs route --cwd "$PWD"
 
 ### 目录约定（放错位置等于白写）
 
-知识库有**三个平级容器**，各自内部再分层；容器根下一律不放笔记。
+> **容器是配置出来的，不是写死的**：本仓库的文档用**泛化示例名**（如 `work/`）说明结构，不含真实私有目录名。
+> **本机真实的容器名、路由与目录含义一律以 `config.json` 为准**（`domainRoots` / `catalogSources` /
+> `domainNotes` / `routes` 才是真值），随时用 `node scripts/note.mjs route --cwd "$PWD"` 查当前生效的落点。
+
+本机知识库有**三个平级容器**，各自内部再分层；容器根下一律不放笔记（下表是这套结构的示例）。
 
 | 目录 | 含义 |
 |---|---|
@@ -83,7 +127,7 @@ node scripts/note.mjs route --cwd "$PWD"
 | `dawn/dawn-skills` | dawn-skills 项目（DSH 技能库：obsidian-inbox / dev-log / db-sync 等） |
 | `work/` | **工作资料容器**：第二级**必须是业务域**，域名取自 `~/Documents/projects/work/` 的子目录 |
 | `work/<域>` | 现有域：`arch`、`service`、`ops`、`work-skills`、`utils`、`workspace`；域内可直接放笔记，可再按项目细分 |
-| `opensource/` | **第三方开源项目容器**：既不属于业务也不属于个人；第二级**必须是仓库名**，取自 `~/Documents/projects/opensource/` 的子目录 |
+| `opensource/` | **第三方开源项目容器**：既不属于工作也不属于个人；第二级**必须是仓库名**，取自 `~/Documents/projects/opensource/` 的子目录 |
 | `opensource/<仓库>` | 现有：`forks`、`mcp`、`skills`（`agentscope-java` 例外，见下）；仓库内可直接放笔记 |
 | `dsh-sessions/` | **顶层归档区**（跨领域原始素材，sediment 专用，不属于任何容器） |
 
@@ -180,7 +224,7 @@ ask_user_question("这条笔记放哪？",
 
 ## C. 每日自动归档（兜底，不需要手动触发）
 
-`scripts/sediment.mjs` 每天 23:00 由 systemd user timer 触发（见 `~/.config/systemd/user/dsh-sediment.timer`）：
+`scripts/sediment.mjs` 每天 23:00 由 `install.mjs` 注册的调度触发（linux 见 `~/.config/systemd/user/dsh-sediment.timer`，macOS 见 `~/Library/LaunchAgents/com.dsh.obsidian-inbox.plist`，Windows 见计划任务 `obsidian-inbox-sediment`；时间用 `install.mjs --time HH:MM` 改）：
 
 1. 扫描 `~/.dsh/storages/session_projcache/sessions/*.json`，取时间窗内有活动的会话；
 2. 拼摘要：优先用 `turnOutline`（每轮问答预览）；**老会话的投影可能为空或预览截断得极小**，此时自动回退解压 `~/.dsh/sessions/<slug>/<sid>/session.jsonl.zstd`，抽 `user/message` + `assistant/message` 的 text（跳过 reasoning）重建摘要，避免老会话被误判成"没内容"而漏归档。**代码块必须整段保留**：transcript 摘要里含代码围栏的段落不按字数截断（只裁围栏外的散文）；turnOutline 摘要若围栏不成对（=在代码中间被切），自动回退读原始 transcript；LLM 提示词明确要求代码/命令/SQL **逐字完整复制**，禁止概括与截断（踩过坑：SQL 曾因截断从知识库丢失）。
@@ -206,7 +250,7 @@ ask_user_question("这条笔记放哪？",
 
 > 门槛 `minAssistantChars`（默认 300）统计的是 `turnOutline` 的**截断预览**长度，会把"轮次少但信息密度高"的会话误判成 trivial。补跑历史会话发现被跳过时，先看 `skipped` 里的 `chars`，再用 `--min-chars` 放宽后重跑。
 
-日志：`~/.local/state/obsidian-inbox/sediment.log`；systemd 侧用 `systemctl --user status dsh-sediment` / `journalctl --user -u dsh-sediment`。
+日志：`~/.local/state/obsidian-inbox/sediment.log`；调度侧自检用 `node scripts/install.mjs --status`（linux 也可 `systemctl --user status dsh-sediment` / `journalctl --user -u dsh-sediment`，macOS 看 `~/Library/LaunchAgents` 与 `sediment.err.log`）。
 
 归档笔记的定位是**原始素材**，`dsh-sessions/` 不是索引也不是成品区：真正成体系的知识，应该在读过之后用写通道整理成主题笔记（可以顺手把归档笔记里的内容提炼过去，再决定要不要删掉原始归档）。要找归档，先看 `dsh-sessions/索引.md`，或搜标签 `#dsh/归档`。
 

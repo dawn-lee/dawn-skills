@@ -9,30 +9,38 @@
  *
  * 用法：
  *   node scripts/sediment.mjs [--date 2026-09-28] [--since-hours 26] [--limit N]
- *                             [--session id1,id2] [--dir dawn] [--dry-run] [--no-llm]
+ *                             [--session id1,id2] [--dir <领域目录>] [--dry-run] [--no-llm]
  *                             [--force] [--quiet] [--json]
  */
 import {
-  readFileSync, existsSync, mkdirSync, readdirSync, appendFileSync, statSync as statSyncFs, realpathSync,
+  readFileSync, existsSync, mkdirSync, readdirSync, appendFileSync, realpathSync,
 } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { dirname, join, basename } from 'node:path';
-import { homedir } from 'node:os';
+import { dirname, join, basename, resolve, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   SKILL_DIR, STATE_DIR, loadConfig, routeDir, slugify, buildFrontmatter, atomicWrite,
   appendSection, vaultAbs, fmtTime, parseArgs, normalizeRel, listNoteIndex, sanitizeBodyLinks,
-  parseFrontmatter, acquireLock, findTranscript,
+  parseFrontmatter, acquireLock, findTranscript, resolveDshBin, expandHome, dshProjcacheRoot,
 } from './lib.mjs';
 
-const HOME = homedir();
 // 下游提前关管道（如 `| head`）时安静退出，不要抛 EPIPE 栈
 process.stdout.on('error', (err) => { if (err?.code === 'EPIPE') process.exit(0); });
-const PROJCACHE_DIR = join(HOME, '.dsh/storages/session_projcache/sessions');
+// DSH 会话投影缓存位置；DSH 装在非默认位置时用 $DSH_HOME 覆盖
+const PROJCACHE_DIR = dshProjcacheRoot();
 const STATE_PATH = join(STATE_DIR, 'archived.json');
 const LOG_PATH = join(STATE_DIR, 'sediment.log');
-const PATCH_PATH = join(SKILL_DIR, 'patch', 'headless-notes-only.yml');
 const WORK_DIR = join(STATE_DIR, 'work');
+/**
+ * 归档用的 headless 补丁：配置 `llm.patch` 优先，否则用技能自带的
+ * `patch/headless-notes-only.yml`（禁用全部工具，防止摘要夹带的注入内容被执行）。
+ * 补丁里的模型/provider 是本机示例，换机器需要改成自己的；找不到补丁时下面的 runLlm 会告警。
+ */
+function resolvePatchPath(cfg) {
+  const custom = cfg.llm?.patch;
+  if (typeof custom === 'string' && custom.trim()) return resolve(expandHome(custom));
+  return join(SKILL_DIR, 'patch', 'headless-notes-only.yml');
+}
 
 const PROMPT_TEMPLATE = `你是 Obsidian 知识库的整理助手。下面是一次 DSH（编码/运维助手）会话的结构化摘要。
 
@@ -59,7 +67,7 @@ const PROMPT_TEMPLATE = `你是 Obsidian 知识库的整理助手。下面是一
 
 3. 引用规则（很重要，写错会污染知识库）：
    - 引用**知识库里的笔记**：只写 Obsidian 内链 \`[[笔记名]]\`，笔记名必须**逐字取自**摘要末尾的「知识库现有笔记」清单；
-   - 引用**知识库以外的文件**（源码、日志、docx、命令等）：用行内代码写路径，例如 \`~/xxx\` 或 \`~/.local/bin/xxx\`；
+   - 引用**知识库以外的文件**（源码、日志、docx、命令等）：用行内代码写路径，例如 \`~/Documents/xxx\` 或 \`~/.local/bin/xxx\`；
    - **绝对禁止**把任何路径写成 Markdown 链接（形如 \`[文字](/home/...)\`）。Obsidian 会把以 \`/\` 开头的链接当成库内相对路径，点击会在库里凭空建出 \`<库根>/home/...\` 的嵌套空文件；
    - 不要臆造路径、行号或文件名；清单里没有、摘要里也没出现的，就不要写；
    - 不要引用或链接本次归档笔记自身。
@@ -99,38 +107,6 @@ function saveState(state) {
   mkdirSync(STATE_DIR, { recursive: true });
   state.runs = (state.runs ?? []).slice(-50);
   atomicWrite(STATE_PATH, `${JSON.stringify(state, null, 2)}\n`);
-}
-
-function whichSync(cmd) {
-  for (const d of (process.env.PATH ?? '').split(':').filter(Boolean)) {
-    const p = join(d, cmd);
-    const st = statSyncSafe(p);
-    if (st && st.isFile() && (st.mode & 0o111)) return p;
-  }
-  return null;
-}
-
-function statSyncSafe(p) {
-  try { return statSyncFs(p); } catch { return null; }
-}
-
-/** dsh 可执行文件：$DSH_BIN → PATH → npx 缓存里的 dsh（取最新）。 */
-function resolveDshBin(cfg) {
-  const explicit = process.env.DSH_BIN || cfg.llm?.command;
-  if (typeof explicit === 'string' && explicit && existsSync(explicit)) return explicit;
-  const onPath = whichSync('dsh');
-  if (onPath) return onPath;
-  const root = join(HOME, '.npm/_npx');
-  let best = null;
-  try {
-    for (const d of readdirSync(root)) {
-      const p = join(root, d, 'node_modules/.bin/dsh');
-      if (!existsSync(p)) continue;
-      const m = statSyncSafe(p);
-      if (!best || (m?.mtimeMs ?? 0) > best.m) best = { p, m: m?.mtimeMs ?? 0 };
-    }
-  } catch { /* 无 npx 缓存 */ }
-  return best?.p ?? null;
 }
 
 function clip(text, max) {
@@ -291,13 +267,22 @@ function buildDigest(s, cfg, fromTurn, inventory) {
 
 // ---------------------------------------------------------------- LLM 精炼
 
+let warnedNoPatch = false;
+
 function runLlm(dshBin, prompt, cfg) {
+  const patchPath = resolvePatchPath(cfg);
   const args = ['--profile', 'headless'];
-  if (existsSync(PATCH_PATH)) args.push('--patch', PATCH_PATH);
+  if (existsSync(patchPath)) {
+    args.push('--patch', patchPath);
+  } else if (!warnedNoPatch) {
+    warnedNoPatch = true;
+    log(`警告：找不到 headless 补丁 ${patchPath}，headless 将以默认策略运行（工具未被禁用）；`
+      + '请用 cfg.llm.patch 指定你自己的补丁');
+  }
   for (const a of cfg.llm?.extraArgs ?? []) args.push(String(a));
   args.push('-');
   const env = { ...process.env };
-  env.PATH = [dirname(process.execPath), dirname(dshBin), env.PATH].filter(Boolean).join(':');
+  env.PATH = [dirname(process.execPath), dirname(dshBin), env.PATH].filter(Boolean).join(delimiter);
   const res = spawnSync(dshBin, args, {
     input: prompt,
     cwd: WORK_DIR,
@@ -345,8 +330,8 @@ function rawNote(s, digest) {
 
 /**
  * 会话归档统一落在知识库**顶层**的 archiveDir（跨领域的原始素材区），
- * 不跟着领域目录走：这样 `dawn/` 与 `work/` 保持纯领域结构。
- * 会话归属的领域（dawn/pop、work/service…）记进 frontmatter 的 domain 字段。
+ * 不跟着领域目录走：这样领域容器（domainRoots）保持纯领域结构。
+ * 会话归属的领域（如 `dawn/pop`、`work/service`）记进 frontmatter 的 domain 字段。
  */
 function writeNote(cfg, s, note, prev, args) {
   const dateStr = fmtTime(s.lastPromptAt, false);
@@ -359,7 +344,7 @@ function writeNote(cfg, s, note, prev, args) {
   }
   const absPath = vaultAbs(cfg, notePath);
   const exists = existsSync(absPath);
-  // 领域只落到容器根（dawn / work）说明没归到具体域：打标记，等人工或后续会话确认后改成真实域
+  // 领域只落到容器根说明没归到具体域：打标记，等人工或后续会话确认后改成真实域
   const unclassified = !domain || cfg.domainRoots.includes(domain);
 
   const meta = [
@@ -458,6 +443,10 @@ function buildArchiveIndex(cfg) {
     .join('、');
   const pending = entries.filter((e) => e.unclassified || !e.domain).length;
   const distilled = entries.filter((e) => e.distilledInto).length;
+  // 提炼去处随配置变化，不要写死目录名
+  const domainHint = cfg.domainRoots.length
+    ? cfg.domainRoots.map((d) => `\`${d}/\``).join('、')
+    : '知识库的主题目录';
 
   const lines = [
     buildFrontmatter({ type: 'index', source: 'dsh', updated: fmtTime(Date.now()), tags: ['dsh/归档', '索引'] }),
@@ -468,7 +457,7 @@ function buildArchiveIndex(cfg) {
     '> 每次会话结束后，`sediment.mjs` 会把该会话精炼成**一篇归档笔记**（背景 / 结论 / 关键步骤 / 注意事项 / 产出与引用），作为**原始素材**留底——目的是兜住"当时没意识到值得沉淀"的知识。',
     '> 本页由脚本在每次归档后自动重建，**请勿手改**。',
     '>',
-    '> **推荐用法**：读归档 → 提炼成主题笔记放进 `dawn/`、`work/`、`opensource/` 对应目录 → 归档本身可以删。归档不是索引、也不是成品笔记。',
+    `> **推荐用法**：读归档 → 提炼成主题笔记放进 ${domainHint} 对应目录 → 归档本身可以删。归档不是索引、也不是成品笔记。`,
     '',
     `共 **${entries.length}** 篇归档：**已提炼 ${distilled}** 篇、待提炼 ${entries.length - distilled} 篇`
     + `${pending ? `；另有 ${pending} 篇未归类（待补 \`domain\`）` : ''}。`,
@@ -698,4 +687,12 @@ function isMainModule() {
       && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url));
   } catch { return false; }
 }
-if (isMainModule()) main();
+if (isMainModule()) {
+  try {
+    main();
+  } catch (err) {
+    // 配置缺失/不合法时给可读提示，不要甩 ESM 堆栈
+    process.stderr.write(`[sediment] ${err?.message ?? err}\n`);
+    process.exit(2);
+  }
+}

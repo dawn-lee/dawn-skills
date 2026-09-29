@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.dsh.obsidian-inbox</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>{{NODE}}</string>
+    <string>{{SKILL_DIR}}/scripts/sediment.mjs</string>
+    <string>--since-hours</string>
+    <string>26</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>{{SKILL_DIR}}</string>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>{{HOUR}}</integer>
+    <key>Minute</key>
+    <integer>{{MINUTE}}</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>{{STATE_DIR}}/sediment.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>{{STATE_DIR}}/sediment.err.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>{{PATH}}</string>
+{{DSH_BIN_ENTRY}}
+  </dict>
+</dict>
+</plist>

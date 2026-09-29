@@ -33,7 +33,11 @@ const USAGE = `用法：
   note.mjs show --path P [--json]
   note.mjs route --cwd P [--json]
   note.mjs distill --path "dsh-sessions/归档.md" --into "[[主题笔记]]" [--note 说明] [--json]
-  note.mjs recover --session <会话id> --into "[[主题笔记]]" [--min-len 300] [--limit 20] [--dry-run] [--json]`;
+  note.mjs recover --session <会话id> --into "[[主题笔记]]" [--min-len 300] [--limit 20] [--dry-run] [--json]
+
+首次使用 / 换电脑：
+  node scripts/init.mjs          # 生成 config.json（探测知识库；--preset simple|projects）
+  node scripts/install.mjs       # 接入 ~/.agents/skills + 注册每日归档；--status 自检`;
 
 function fail(code, message, extra = {}) {
   process.stdout.write(`${JSON.stringify({ ok: false, error: message, ...extra }, null, 2)}\n`);
@@ -54,13 +58,22 @@ function splitList(v) {
 const args = parseArgs(process.argv.slice(2));
 const cmd = args._[0];
 const json = args.json === true;
-const cfg = loadConfig();
+
+// 无子命令时先打印用法：此时还不该要求本机配置已存在（新机器上第一条命令就是它）
+if (!cmd || cmd === 'help') {
+  process.stdout.write(`${USAGE}\n`);
+  process.exit(0);
+}
+
+// 配置缺失/不合法时给可读提示，不要甩 ESM 堆栈（新机器首次运行必踩）
+let cfg;
+try {
+  cfg = loadConfig();
+} catch (err) {
+  fail(2, String(err?.message ?? err));
+}
 
 try {
-  if (!cmd) {
-    process.stdout.write(`${USAGE}\n`);
-    process.exit(0);
-  }
   const handlers = {
     new: cmdNew, append: cmdAppend, search: cmdSearch, show: cmdShow, route: cmdRoute,
     distill: cmdDistill, recover: cmdRecover,
@@ -89,7 +102,11 @@ function cmdNew() {
   // 归档区由 sediment 自动维护，不接受手工新建（避免污染原始素材区）
   const archiveRoot = cfg.archiveDir ? normalizeRel(cfg.archiveDir) : '';
   if (archiveRoot && (dirRel === archiveRoot || dirRel.startsWith(`${archiveRoot}/`))) {
-    fail(2, `归档区 ${archiveRoot}/ 由 sediment 自动维护，不放手工笔记（补归档用 ./run-sediment.sh --session <id>）；请写入 各领域目录`);
+    // 容器名从配置取，不写死（换机器/换预设时提示才不会指错地方）
+    const domainHint = cfg.domainRoots.length
+      ? cfg.domainRoots.map((d) => `${d}/`).join(' ')
+      : '各领域目录';
+    fail(2, `归档区 ${archiveRoot}/ 由 sediment 自动维护，不放手工笔记（补归档用 ./run-sediment.sh --session <id>）；请写入 ${domainHint}`);
   }
   const prefix = args['date-prefix'] === true ? `${todayStr()} ` : '';
   const relPath = normalizeRel([dirRel, `${prefix}${slug}.md`].filter(Boolean).join('/'));
