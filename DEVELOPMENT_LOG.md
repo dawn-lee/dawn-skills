@@ -57,6 +57,19 @@ obsidian-inbox, skill 开发, 知识库, 跨平台
 - `skills/obsidian-inbox/scripts/install.mjs - 修改, init 参数透传补 from-config`
 - `skills/obsidian-inbox/SKILL.md - 修改, 安装章节补 --from-config 用法与适用场景`
 **commit**：acb33c6
+
+### （续）续记：用 git filter-branch 改写整条历史做私有信息脱敏（39 个提交全部换 SHA），并重映射日志里的 22 个 hash 引用。起因：仓库要公开，而 config.json（家目录、私有目录名）与 db-sync 示例里的内部 RDS 实例名/库表名会被 git log 或 GitHub 旧提交翻出来。做法：① 先在当前工作树按两级规则脱敏（Tier1 定点替换私有标识，所有行都改；Tier2 措辞泛化，只改文档与代码注释），把 note.mjs 提示、strictCatalog 默认值、companyDomains() 等硬编码改成配置驱动；② 在临时克隆上演练 filter-branch --tree-filter（提交数守恒、tip 树哈希一致、只改预期 8 个文件）后才对真仓库执行；③ 用 refs/original 与 main 的位置配对生成新旧 SHA 映射，替换 DEVELOPMENT_LOG.md 里 22 个引用并逐条 git show 验证；④ 删除 refs/original、过期 reflog、gc --prune=now，确认旧 blob 已不可读取。执行中发现远端 main 实际在 4e2226a（本地 remote-tracking 引用是旧的，未 fetch），比本地多一个 crawl4ai 提交，已 cherry-pick 并入（README/.gitignore 冲突按两边都保留解决，crawl4ai 文件与远端逐字一致），避免 force-push 把它冲掉。改写前的整条历史已备份为 ~/dawn-skills-pre-scrub-<时间戳>.bundle 并附新旧 SHA 映射表；同步远端需 git push --force origin main（尚未执行）。
+
+**改动文件**：
+- `DEVELOPMENT_LOG.md - 修改, 22 个 commit hash 重映射到新 SHA + 索引重建`
+- `skills/obsidian-inbox/scripts/note.mjs - 修改, 归档区报错提示改为按 cfg.domainRoots 生成容器名`
+- `skills/obsidian-inbox/scripts/lib.mjs - 修改, strictCatalog 默认改为空数组（不再写死容器名）、删除未被调用的 companyDomains()`
+- `skills/db-sync/SKILL.md - 修改, 内部 RDS 实例名/库表名改为泛化示例`
+- `skills/db-sync/scripts/db-sync.sh - 修改, 用法注释里的实例名/库表名泛化`
+- `skills/obsidian-inbox/SKILL.md - 修改, 私有目录名与路径改为泛化示例并注明真值以 config.json 为准`
+- `README.md - 修改, 合并远端 crawl4ai 条目与配置章节 + 安装说明补全`
+- `.gitignore - 修改, 合并远端 .history 规则`
+- `skills/crawl4ai/** - 新增, 并入远端 crawl4ai 技能（13 个文件，与远端逐字一致）`
 ## Session #2 - 2026-09-28 11:04
 
 **需求**：
