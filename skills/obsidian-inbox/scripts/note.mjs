@@ -27,12 +27,13 @@ import {
 process.stdout.on('error', (err) => { if (err?.code === 'EPIPE') process.exit(0); });
 
 const USAGE = `用法：
-  note.mjs new --title T [--dir D] [--mkdir] [--type TYPE] [--tags a,b] [--cwd P] [--session ID] [--date-prefix] [--append|--force] [--body-file -] [--json]
-  note.mjs append --path P [--section S] [--body-file -] [--json]
+  note.mjs new --title T [--dir D] [--mkdir] [--type TYPE] [--tags a,b] [--cwd P] [--session ID] [--date-prefix] [--append|--force] [--dry-run] [--body-file -] [--json]
+  note.mjs append --path P [--section S] [--dry-run] [--body-file -] [--json]
   note.mjs search --query Q [--limit N] [--json]
   note.mjs show --path P [--json]
   note.mjs route --cwd P [--json]
-  note.mjs distill --path "dsh-sessions/归档.md" --into "[[主题笔记]]" [--note 说明] [--json]`;
+  note.mjs distill --path "dsh-sessions/归档.md" --into "[[主题笔记]]" [--note 说明] [--json]
+  note.mjs recover --session <会话id> --into "[[主题笔记]]" [--min-len 300] [--limit 20] [--dry-run] [--json]`;
 
 function fail(code, message, extra = {}) {
   process.stdout.write(`${JSON.stringify({ ok: false, error: message, ...extra }, null, 2)}\n`);

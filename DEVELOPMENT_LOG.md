@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×21
-- dev-log: #1×22
-- obsidian-inbox: #2×21
-- skill 开发: #1×22, #2×21
+- 知识库: #2×22
+- dev-log: #1×23
+- obsidian-inbox: #2×22
+- skill 开发: #1×23, #2×22
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -250,6 +250,11 @@ skill 开发, obsidian-inbox, 知识库
 - `scripts/sediment.mjs - 修改, 删除本地 findTranscript 改用 lib 版；result 新增 rewritten 数组并在 JSON/账本 runs 中独立输出（原先把 rewritten 混进 appended）`
 - `scripts/note.mjs - 修改, 新增 recover 子命令（--session/--into/--min-len/--limit/--dry-run）：解压 transcript 抽正文代码块、与目标笔记比对、缺失的追加到固定小节「代码块回补」，带锁与 dry-run`
 - `SKILL.md - 修改, D 节补 recover 用法与"精炼过的笔记会被判缺失"的注意事项`
+
+### （续）补记：recover 与 --dry-run 补进 note.mjs 的 USAGE 输出（此前只改了文件头注释）
+
+**改动文件**：
+- `scripts/note.mjs - 修改, USAGE 常量补 recover 行与 new/append 的 --dry-run`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：
