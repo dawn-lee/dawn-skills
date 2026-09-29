@@ -56,6 +56,7 @@ obsidian-inbox, skill 开发, 知识库, 跨平台
 - `skills/obsidian-inbox/scripts/init.mjs - 修改, 新增 --from-config 配置迁移 + toHomeToken（正则文本用字符串替换、不走 resolve）+ 写盘前用 expandVars 解析 ${HOME} 校验知识库存在`
 - `skills/obsidian-inbox/scripts/install.mjs - 修改, init 参数透传补 from-config`
 - `skills/obsidian-inbox/SKILL.md - 修改, 安装章节补 --from-config 用法与适用场景`
+**commit**：acb33c6
 ## Session #2 - 2026-09-28 11:04
 
 **需求**：
@@ -84,7 +85,7 @@ skill 开发, obsidian-inbox, 知识库
 - 技能以软链接入 ~/.agents/skills 后运行期状态会落进 git 工作区；改到 ~/.local/state/obsidian-inbox 并更新 excludeCwdPrefixes
 - 自测修复三处：JSDoc 注释里含 */ 的 glob 导致 ESM 解析失败、ESM 中误用 require、解析模型输出时 tags 注释漏进笔记正文
 
-**commit**：c256e7b
+**commit**：4867875
 
 ---
 
@@ -95,7 +96,7 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 摘要附「知识库现有笔记」清单、引用规范写进 prompt、写入前统一 sanitizeBodyLinks`
 - `skills/obsidian-inbox/SKILL.md - 修改, 新增「引用与链接规范」小节与自动兜底说明`
 
-**commit**：75d16e1
+**commit**：607dddd
 
 ### （续）续记：按用户定义的知识库目录语义细化路由，并禁止把笔记直接写进领域容器根
 
@@ -106,7 +107,7 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, stdout EPIPE 兜底`
 - `skills/obsidian-inbox/SKILL.md - 修改, 新增「目录约定」小节（dawn/work 为容器 + 各子目录含义 + 判定顺序）`
 
-**commit**：5139d1e
+**commit**：d89113b
 
 ### （续）续记：归档迁到知识库顶层 dsh-sessions，业务域按 projects/work 动态划分
 
@@ -116,7 +117,7 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/note.mjs - 修改, route 输出目录含义/业务域清单/容器告警`
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 归档路径改为顶层 archiveDir，领域写进 frontmatter 的 domain 字段与 callout`
 
-**commit**：889449a
+**commit**：01eb117
 
 ### （续）续记：域不确定时改为主动询问用户；无人值守归档打「待归类」标记
 
@@ -125,7 +126,7 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 域只落到容器根时写 unclassified: true 与 dsh/待归类 标签，callout 标注待归类`
 - `skills/obsidian-inbox/scripts/lib.mjs - 修改, buildFrontmatter 支持布尔值（此前被引号包成字符串，Obsidian 属性变文本）`
 
-**commit**：663af36
+**commit**：b9d601a
 
 ### （续）续记：把「拿不准就问」从 work 扩展到所有落位决策，新建分类目录需用户确认（--mkdir）
 
@@ -134,7 +135,7 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/note.mjs - 修改, new 接入 assertDirReady、route 输出了目录是否存在与「需 --mkdir」告警、用法补充该参数`
 - `skills/obsidian-inbox/SKILL.md - 修改, 「拿不准就问，不许乱放」改为通用规则（三种必须问的情形 + 候选问法 + 四类代码拦截表）`
 
-**commit**：13fe7b8
+**commit**：0cf2d01
 
 ### （续）续记：为下载的调研源码补路由（agentscope-java → work/arch），并支持 --min-chars 放宽归档门槛
 
@@ -143,7 +144,7 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 新增 --min-chars 覆盖有效内容量门槛`
 - `skills/obsidian-inbox/SKILL.md - 修改, 路由说明补充"下载源码归属跟随调研主题"与 --min-chars 用法及门槛口径说明`
 
-**commit**：5b79f23
+**commit**：a6e8aeb
 
 ### （续）续记：新增 opensource 第三容器（第三方开源项目既非工作也非个人），普通化分类清单配置
 
@@ -153,7 +154,7 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/note.mjs - 修改, route 输出改为通用 catalogEntries`
 - `skills/obsidian-inbox/SKILL.md - 修改, 目录约定改为三容器结构 + cwd 路由表 + 例外说明`
 
-**commit**：305b531
+**commit**：dd1d3a4
 
 ### （续）续记：为归档区加自动索引页，回填 5 篇缺失的 domain
 
@@ -161,7 +162,7 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 新增 buildArchiveIndex()/writeArchiveIndex()：每次归档后重建 dsh-sessions/索引.md（日期/领域/链接/会话 id + 领域分布统计），并新增 --reindex 只重建索引`
 - `skills/obsidian-inbox/SKILL.md - 修改, 说明索引页与 --reindex，明确归档区不是索引/成品区`
 
-**commit**：37e66d5
+**commit**：8770089
 
 ### （续）续记：补上「提炼」环节（归档 → 主题笔记）并首次全量执行
 
@@ -171,7 +172,7 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 索引页新增「提炼」列与已提炼/待提炼统计`
 - `skills/obsidian-inbox/SKILL.md - 修改, 新增 D 节「提炼：把归档变成主题笔记」（三种归宿 + 命令 + 可删条件）`
 
-**commit**：9169448
+**commit**：e8a06e8
 
 ### （续）续记：arch 域下新增子项目层级；归档器支持读原始 transcript 兜底，救回老会话
 
@@ -181,14 +182,14 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 新增 transcript 兜底：turnOutline 为空或预览过薄时解压 session.jsonl.zstd 抽 user/assistant text 重建摘要（跳过 reasoning）`
 - `skills/obsidian-inbox/SKILL.md - 修改, 路由表加子项目层，归档流程说明 transcript 兜底`
 
-**commit**：a13dc2b
+**commit**：bff3459
 
 ### （续）续记：修复 transcript 兜底只认 session.jsonl.zstd 的缺陷；为内部业务平台笔记补回原始 SQL
 
 **改动文件**：
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, findTranscript 改为匹配目录内所有 *.jsonl.zstd 并按 mtime 取最新（修复带版本号 session.v3/v4.jsonl.zstd 认不出的缺陷）`
 
-**commit**：30007ef
+**commit**：a840566
 
 ### （续）续记：修复代码块被截断丢失的管道缺陷，并回源补全 8 篇历史归档缺失的代码块
 
@@ -196,7 +197,7 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, transcriptDigest 代码围栏整段保留不截断（clipSmart）、turnOutline 摘要围栏不成对时自动回退 transcript、LLM 提示词新增第 8 条代码块必须逐字完整保留`
 - `skills/obsidian-inbox/SKILL.md - 修改, 归档流程补代码块保留规则与踩坑说明`
 
-**commit**：e5bdfa4
+**commit**：a0e5f86
 
 ### （续）续记：归档支持 --force 整篇覆盖重写；修复 dev-log 空壳归档并回源核 transcript
 
@@ -204,7 +205,7 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, writeNote：--force 时整篇覆盖重写（原来文件存在就无条件追加，force 也留下旧内容）`
 - `skills/obsidian-inbox/SKILL.md - 修改, 补充 --force=整篇覆盖重写语义`
 
-**commit**：5ab6179
+**commit**：9ba13a9
 
 ### （续）续记：文档一致性整理——SKILL.md 修正重复 D 标题、全局 AGENTS.md 与方案文档同步当前实现
 
@@ -213,14 +214,14 @@ skill 开发, obsidian-inbox, 知识库
 - `知识库 dawn/知识库/DSH 会话知识自动沉淀到 Obsidian 的方案.md - 重写, 同步当前实现（work/arch/<子项目> 嵌套、transcript 兜底、代码块整段保留、--force 覆盖、提炼三归宿、DEVELOPMENT_LOG 续记数 6→13），移除过时历史代码转储`
 - `全局 ~/.dsh/AGENTS.md - 修改, 落位规则补 work/arch/<子项目> 嵌套，会话归档段补提炼循环（三种归宿）`
 
-**commit**：e298d0c
+**commit**：520f3c4
 
 ### （续）续记：补全段结构规范化与围栏感知复核（知识库内容，仓库无代码改动）
 
 **改动文件**：
 - `知识库 Obsidian Vault（不在本仓库）- 修改, work/arch/app/内部业务系统接口与提交查询.md 整篇重写（多轮补 SQL 把精炼 SQL 弄到代码块补全标题下，重写为干净的精炼版并吸收独有内容、删迭代重复转储）；work/arch/app/上线监控报错排查.md 补全块重编号 1-14（两轮补全各自从 1 编号）；其余 4 篇（DSH 预设/AgentScope/Jar/输入法）经围栏感知复核确认结构正常`
 
-**commit**：9804ebf
+**commit**：f966f82
 
 ### （续）续记：dawn 容器按项目分目录（dawn/<项目> 镜像 projects/dawn），dawn/知识库不再堆项目知识
 
@@ -229,7 +230,7 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/SKILL.md - 修改, 目录约定加项目目录概念（dawn/<项目> 镜像 projects/dawn）与 dawn/dawn-skills 行，路由表拆分 projects/dawn/<项目> 与容器兜底`
 - `全局 ~/.dsh/AGENTS.md - 修改, 落位规则补 dawn 下一级=主题目录或项目目录`
 
-**commit**：a64d541
+**commit**：3cead37
 
 ### （续）续记：修复 sediment 三个隐患（import 误触全量、force 丢提炼标记、运行无留痕）；审计定位到一次无法归因的运行
 
@@ -239,7 +240,7 @@ skill 开发, obsidian-inbox, 知识库
 - `③真实运行前写 [run] pid/cwd/argv/window 留痕到 sediment.log（--reindex 不留）`
 - `skills/obsidian-inbox/SKILL.md - 修改, 归档流程补 force 保留语义、[run] 留痕与 import 守卫说明`
 
-**commit**：1721518
+**commit**：48e8783
 
 ### （续）续记：修复并发竞态与"重写即丢"状态家族（互斥锁、distill domain 校准、force 保留 domain、markDistilled 空参不抹旧值）
 
@@ -249,7 +250,7 @@ skill 开发, obsidian-inbox, 知识库
 - `scripts/note.mjs - 修改, cmdDistill 接锁（waitMs=0 拿不到立即失败）+ 自动校准 domain（domain = 提炼目标所在目录，输出校准前后）`
 - `skills/obsidian-inbox/SKILL.md - 修改, 归档节补互斥锁说明，提炼节补 domain 自动校准与 force 保留语义`
 
-**commit**：615ec96
+**commit**：5ce40cb
 
 
 ### （续）续记：为 dawn 容器接入 projects/dawn 项目清单校验（catalogSources 加 dawn），主题目录以 domainNotes 豁免不误伤
@@ -259,7 +260,7 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/obsidian-inbox/config.json - 修改, catalogSources 新增 dawn → ~/Documents/projects/dawn`
 - `skills/obsidian-inbox/SKILL.md - 修改, 代码会拦截段补 dawn 目录校验规则与 domainNotes 豁免说明`
 
-**commit**：6102f5b
+**commit**：1824bc5
 
 ### （续）续记：修复 dev-log 两处缺陷——add --continue 静默丢弃可选参数、link 在多段会话上挂错段
 
@@ -268,13 +269,13 @@ skill 开发, obsidian-inbox, 知识库
 - `skills/dev-log/SKILL.md - 修改, 记录流程补「续记参数同样生效」与 link 三种用法/唯一匹配约束`
 
 **变更摘要**：
-缺陷一：cmdAdd 的 --continue 分支只拼「标题 + 改动文件」，传 --summary/--issues/--commit/--theme 会被静默丢弃（本会话实录：一条续记的变更摘要没进日志），现与新建模式同构补齐这些字段。缺陷二：cmdLink 假设「一条 Session 只有一个 commit」，在 Session 正文里找第一条 commit 行并替换，多段会话（如 Session #2 有 19 段）会误改最老的段——实测会把 c256e7b 覆盖掉；现按 ### 标题切段，默认挂最新一段，新增 --section 唯一匹配指定段（回填历史用），0 段或 ≥2 段报错并列出候选。
+缺陷一：cmdAdd 的 --continue 分支只拼「标题 + 改动文件」，传 --summary/--issues/--commit/--theme 会被静默丢弃（本会话实录：一条续记的变更摘要没进日志），现与新建模式同构补齐这些字段。缺陷二：cmdLink 假设「一条 Session 只有一个 commit」，在 Session 正文里找第一条 commit 行并替换，多段会话（如 Session #2 有 19 段）会误改最老的段——实测会把 4867875 覆盖掉；现按 ### 标题切段，默认挂最新一段，新增 --section 唯一匹配指定段（回填历史用），0 段或 ≥2 段报错并列出候选。
 
 **遇到的问题**：
 - 9 项临时副本测试全过：续记含摘要/问题/commit、默认挂最新段不动旧段、--section 精确替换、Session #1 单段回归、新建条目回归、index、--section 0 段与 13 段均报错退出1
 - 此前为 20 个历史段手工插入 commit 行属临时手段，脚本修好后不再需要
 
-**commit**：5a9680b
+**commit**：89f526f
 
 
 
@@ -320,6 +321,6 @@ dev-log, skill 开发
 - app 日志编号历史严重重复（131 条仅 78 个不同编号，#7×15），索引需带 ×N 标记
 - 语义索引由 LLM 打标但未写入条目，index 命令设计为保留既有索引只增量补充，避免重跑覆盖语义
 
-**commit**：18dd298
+**commit**：c502879
 
 ---
