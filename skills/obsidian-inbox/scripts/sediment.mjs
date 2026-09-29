@@ -670,17 +670,20 @@ for (const s of candidates) {
   saveState(state);
 }
 
-state.runs.push({
-  at: Date.now(),
-  window: win.label,
-  mode: result.mode,
-  scanned: result.scanned,
-  created: result.created.length,
-  appended: result.appended.length,
-  skipped: result.skipped.length,
-  failed: result.failed.length,
-});
-saveState(state);
+// 运行记录与账本落盘：dry-run 只读，不写账本（留痕在 sediment.log 的 [run] 行里）
+if (!dryRun) {
+  state.runs.push({
+    at: Date.now(),
+    window: win.label,
+    mode: result.mode,
+    scanned: result.scanned,
+    created: result.created.length,
+    appended: result.appended.length,
+    skipped: result.skipped.length,
+    failed: result.failed.length,
+  });
+  saveState(state);
+}
 
 // 每次归档后重建入口页（dry-run 不动文件）
 if (!dryRun) {

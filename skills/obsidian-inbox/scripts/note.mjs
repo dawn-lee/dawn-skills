@@ -83,6 +83,11 @@ function cmdNew() {
     dirSource,
   );
   assertDirReady(cfg, dirRel, { create: args.mkdir === true, source: dirSource });
+  // 归档区由 sediment 自动维护，不接受手工新建（避免污染原始素材区）
+  const archiveRoot = cfg.archiveDir ? normalizeRel(cfg.archiveDir) : '';
+  if (archiveRoot && (dirRel === archiveRoot || dirRel.startsWith(`${archiveRoot}/`))) {
+    fail(2, `归档区 ${archiveRoot}/ 由 sediment 自动维护，不放手工笔记（补归档用 ./run-sediment.sh --session <id>）；请写入 各领域目录`);
+  }
   const prefix = args['date-prefix'] === true ? `${todayStr()} ` : '';
   const relPath = normalizeRel([dirRel, `${prefix}${slug}.md`].filter(Boolean).join('/'));
   const absPath = vaultAbs(cfg, relPath);
@@ -96,12 +101,17 @@ function cmdNew() {
 
   const similar = findExistingByTitle(cfg, slug).filter((p) => p !== relPath);
   const exists = existsSync(absPath);
+  const dryRun = args['dry-run'] === true;
 
   if (exists && !(args.force === true)) {
     if (args.append === true) {
-      appendSection(absPath, typeof args.section === 'string' ? args.section : null, body);
-      const out = { ok: true, status: 'appended', path: relPath, absPath };
-      process.stdout.write(json ? `${JSON.stringify(out, null, 2)}\n` : `${relPath}（已追加）\n`);
+      if (!dryRun) appendSection(absPath, typeof args.section === 'string' ? args.section : null, body);
+      const out = {
+        ok: true, dryRun: dryRun || undefined, status: dryRun ? 'planned' : 'appended', path: relPath, absPath,
+      };
+      process.stdout.write(json
+        ? `${JSON.stringify(out, null, 2)}\n`
+        : `${dryRun ? '[dry-run] 将追加到 ' : ''}${relPath}${dryRun ? '' : '（已追加）'}\n`);
       return;
     }
     fail(3, '目标笔记已存在，改用 append 或加 --force', { path: relPath, absPath, similar });
@@ -118,9 +128,16 @@ function cmdNew() {
     tags: tags.length ? tags : undefined,
   });
   const content = `${fm}\n\n# ${title}\n\n${body}\n`;
-  atomicWrite(absPath, content);
-  const out = { ok: true, status: exists ? 'overwritten' : 'created', path: relPath, absPath, title, tags, similar };
-  process.stdout.write(json ? `${JSON.stringify(out, null, 2)}\n` : `${relPath}\n`);
+  if (!dryRun) atomicWrite(absPath, content);
+  const out = {
+    ok: true,
+    dryRun: dryRun || undefined,
+    status: dryRun ? 'planned' : (exists ? 'overwritten' : 'created'),
+    path: relPath, absPath, title, tags, similar,
+  };
+  process.stdout.write(json
+    ? `${JSON.stringify(out, null, 2)}\n`
+    : `${dryRun ? '[dry-run] 将写入 ' : ''}${relPath}\n`);
 }
 
 function cmdAppend() {
@@ -129,9 +146,13 @@ function cmdAppend() {
   if (!existsSync(absPath)) fail(4, `笔记不存在：${args.path}`);
   const body = readBodyArg(args).trim();
   if (!body) fail(2, 'append 需要正文（--body-file - 或 --body）');
-  appendSection(absPath, typeof args.section === 'string' ? args.section : null, body);
+  const dryRun = args['dry-run'] === true;
+  if (!dryRun) appendSection(absPath, typeof args.section === 'string' ? args.section : null, body);
   const rel = relative(cfg.vault, absPath).split(sep).join('/');
-  process.stdout.write(json ? `${JSON.stringify({ ok: true, status: 'appended', path: rel, absPath }, null, 2)}\n` : `${rel}（已追加）\n`);
+  const out = { ok: true, dryRun: dryRun || undefined, status: dryRun ? 'planned' : 'appended', path: rel, absPath };
+  process.stdout.write(json
+    ? `${JSON.stringify(out, null, 2)}\n`
+    : `${dryRun ? '[dry-run] 将追加到 ' : ''}${rel}${dryRun ? '' : '（已追加）'}\n`);
 }
 
 function cmdSearch() {
@@ -155,7 +176,7 @@ function cmdShow() {
   if (!existsSync(absPath)) fail(4, `笔记不存在：${args.path}`);
   const note = readNote(absPath);
   if (json) {
-    process.stdout.write(`${JSON.stringify({ ok: true, path: args.path, fields: note.fields, bytes: statSync(absPath).size }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ ok: true, path: args.path, fields: note.fields, body: note.body, bytes: statSync(absPath).size }, null, 2)}\n`);
     return;
   }
   process.stdout.write(note.raw);

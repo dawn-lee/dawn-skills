@@ -187,7 +187,13 @@ export function assertNoteDir(cfg, relDir, source) {
   const rel = normalizeRel(relDir);
   if (!cfg.domainRoots.includes(rel)) {
     const head = rel.split('/')[0];
-    if ((cfg.catalogSources ?? {})[head]) assertKnownCatalogEntry(cfg, rel, source);
+    // 只有 strictCatalog（默认 work/opensource）才做"必须对应真实目录"的硬校验。
+    // dawn 是软校验：已知主题/项目目录直接放行，新主题目录留给 assertDirReady 用 --mkdir 放行
+    // （SKILL.md 约定"按主题新建如 dawn/性能调优 → 确认后加 --mkdir"，硬校验会让 --mkdir 失效）。
+    const strict = cfg.strictCatalog ?? [];
+    if ((cfg.catalogSources ?? {})[head] && strict.includes(head)) {
+      assertKnownCatalogEntry(cfg, rel, source);
+    }
     return rel;
   }
   const entries = [...new Set([...catalogEntries(cfg, rel), ...themeDirs(cfg, rel)])].sort();

@@ -68,6 +68,8 @@ node scripts/note.mjs route --cwd "$PWD"
 
 **退出码 3 = 目标笔记已存在**，此时输出里会带 `similar` 列表；改成 `append`，或用 `--force` 明确覆盖。
 
+**写前预览用 `--dry-run`**（`new` / `append` 都支持）：只做校验与路由、输出 `status: planned`，**不落盘**；试探落位是否合法时优先用它。
+
 ### 目录约定（放错位置等于白写）
 
 知识库有**三个平级容器**，各自内部再分层；容器根下一律不放笔记。
@@ -134,12 +136,15 @@ ask_user_question("这条笔记放哪？",
 
 | 落点 | 结果 |
 |---|---|
-| `dawn` / `work`（容器根） | 报错 + 列出可选子目录 / 业务域清单 |
-| `work/<不存在的域>` | 报错 + 列出真实业务域 |
+| `dawn` / `work` / `opensource`（容器根） | 报错 + 列出可选子目录 / 分类清单 |
+| `work/<不存在的域>`、`work/arch/<不存在的子项目>`、`opensource/<不存在的仓库>` | 报错 + 列出真实清单（`strictCatalog` 容器：**必须对应 `~/Documents/projects/` 下的真实目录**） |
 | 库外绝对路径 | 报错（`路径不在知识库内`） |
 | **不存在的分类目录** | 报错：*"写入等于新建一个分类…确认后再加 `--mkdir`；拿不准就先问用户"* |
+| `dsh-sessions/`（归档区） | 报错：归档区由 sediment 维护，不放手工笔记（补归档用 `./run-sediment.sh --session <id>`） |
 
-`--mkdir` 是"我已确认这个分类"的显式声明——**只有用户点头之后才用它**。例外：`work/<已知业务域>`（域清单来自 `~/Documents/projects/work/`）属于你既定的分类体系，首次写入会自动建目录，不必确认。
+`--mkdir` 是"我已确认这个分类"的显式声明——**只有用户点头之后才用它**。例外：容器的**既定分类**（`work/<业务域>`、`work/arch/<子项目>`、`dawn/<项目>`、`opensource/<仓库>`，清单来自 `catalogSources`）首次写入会自动建目录，不必确认。
+
+> **严格 vs 软校验**（`strictCatalog`）：`work`、`opensource` 是严格容器——子目录必须对应真实项目目录（写错名直接报错，不给 `--mkdir` 逃生口）；`dawn` 是软校验——真实项目目录（`dawn/dawn-skills`）与已登记主题目录（`dawn/pop`…）自动放行，**新主题目录**（如 `dawn/性能调优`）走 `--mkdir` + 用户确认。
 
 归档是无人值守的，问不了人：当域只能落到容器根（`dawn` / `work`）时，笔记会写 `unclassified: true` 并打上 `dsh/待归类` 标签。事后用标签视图或 `note.mjs search --query 待归类` 捞出来，确认域之后改掉 `domain`、删掉标签即可。
 

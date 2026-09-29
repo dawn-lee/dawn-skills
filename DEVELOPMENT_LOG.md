@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×19
-- dev-log: #1×20
-- obsidian-inbox: #2×19
-- skill 开发: #1×20, #2×19
+- 知识库: #2×20
+- dev-log: #1×21
+- obsidian-inbox: #2×20
+- skill 开发: #1×21, #2×20
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -233,6 +233,15 @@ skill 开发, obsidian-inbox, 知识库
 **commit**：5a9680b
 
 
+
+### （续）续记：check 后修复 5 个问题——dry-run 假实现（note）、dry-run 写账本（sediment）、dawn --mkdir 回归、show 不带正文、归档区可手写
+
+**改动文件**：
+- `scripts/note.mjs - 修改, 实现 --dry-run（new 含 --append 分支、append：只校验输出 planned 不落盘）；show --json 增加 body 正文字段；new 拦截写入归档区`
+- `scripts/sediment.mjs - 修改, dry-run 不再写账本（state.runs+saveState 加 !dryRun 守卫）`
+- `scripts/lib.mjs - 修改, assertNoteDir 引入 strictCatalog 门控：仅 work/opensource 做"必须对应真实目录"硬校验，dawn 走软校验（已知目录放行、新主题需 --mkdir）`
+- `config.json - 修改, 新增 strictCatalog: [work, opensource]`
+- `SKILL.md - 修改, 补 --dry-run 用法、7 类落点拦截表、严格/软校验说明`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：
