@@ -56,7 +56,7 @@ obsidian-inbox, skill 开发, 知识库, 跨平台
 - `skills/obsidian-inbox/scripts/init.mjs - 修改, 新增 --from-config 配置迁移 + toHomeToken（正则文本用字符串替换、不走 resolve）+ 写盘前用 expandVars 解析 ${HOME} 校验知识库存在`
 - `skills/obsidian-inbox/scripts/install.mjs - 修改, init 参数透传补 from-config`
 - `skills/obsidian-inbox/SKILL.md - 修改, 安装章节补 --from-config 用法与适用场景`
-**commit**：f4f8f49
+**commit**：885ff3d
 
 ### （续）续记：用 git filter-branch 改写整条历史做私有信息脱敏（39 个提交全部换 SHA），并重映射日志里的 22 个 hash 引用。起因：仓库要公开，而 config.json（家目录、私有目录名）与 db-sync 示例里的内部 RDS 实例名/库表名会被 git log 或 GitHub 旧提交翻出来。做法：① 先在当前工作树按两级规则脱敏（Tier1 定点替换私有标识，所有行都改；Tier2 措辞泛化，只改文档与代码注释），把 note.mjs 提示、strictCatalog 默认值、companyDomains() 等硬编码改成配置驱动；② 在临时克隆上演练 filter-branch --tree-filter（提交数守恒、tip 树哈希一致、只改预期 8 个文件）后才对真仓库执行；③ 用 refs/original 与 main 的位置配对生成新旧 SHA 映射，替换 DEVELOPMENT_LOG.md 里 22 个引用并逐条 git show 验证；④ 删除 refs/original、过期 reflog、gc --prune=now，确认旧 blob 已不可读取。执行中发现远端 main 实际在 4e2226a（本地 remote-tracking 引用是旧的，未 fetch），比本地多一个 crawl4ai 提交，已 cherry-pick 并入（README/.gitignore 冲突按两边都保留解决，crawl4ai 文件与远端逐字一致），避免 force-push 把它冲掉。改写前的整条历史已备份为 ~/dawn-skills-pre-scrub-<时间戳>.bundle 并附新旧 SHA 映射表；同步远端需 git push --force origin main（尚未执行）。
 
