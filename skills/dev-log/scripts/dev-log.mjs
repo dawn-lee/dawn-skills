@@ -8,8 +8,8 @@
  *       [--theme ..] [--commit <hash>] [--continue <N>] [--file <path>]
  *                             新增/续记一条 Session 条目（默认取数值 max 编号 +1）
  *   index [--file <path>]     解析条目并按主题重建头部索引（同号多条标 #N×次数）
- *   link <hash> [--session <N>] [--file <path>]
- *                             把 commit 挂到指定（默认最新一条）条目
+ *   link <hash> [--session <N>] [--section <标题片段>] [--file <path>]
+ *                             把 commit 挂到指定条目（默认 Session 内最新一段续记）
  *   query <词> [--file <path>] 只打印匹配条目的 Session 号 + 需求首句 + 文件列表
  *
  * 通用：
@@ -29,14 +29,17 @@ add --req "需求" --files "a.java - 修改, 简述; b.java - 新增" \\
     --summary "变更摘要" [--issues "问题1; 问题2"] [--theme "callgraph, 线程池"] \\
     [--commit <hash>] [--continue <N>] [--file <path>]
     新建条目默认取数值 max 编号 +1；--continue <N> 则在 Session #N 下追加"（续）"段落
+    --theme/--summary/--issues/--commit 在新建与续记两种模式下都生效
     要求 --req 与 --files 必填
 
 index [--file <path>]
     解析全部 Session 条目，按主题聚合重建头部索引；缺主题标签的按改动文件推断
     主题来源优先级：条目 **主题**：标签 > 文件名推断 > "未分类"
 
-link <hash> [--session <N>] [--file <path>]
-    给指定（默认最新一条）条目补一行 commit：<hash>
+link <hash> [--session <N>] [--section <标题片段>] [--file <path>]
+    给指定条目补一行 commit：<hash>
+    默认挂到 Session 内"最新一段"（含续记，文件靠下 = 最新）；
+    --section 按标题片段唯一匹配某一段（回填历史条目用）
 
 query <词> [--file <path>]
     匹配 需求/变更摘要/改动文件/主题，只打印 编号 + 需求首句 + 文件列表
@@ -215,16 +218,27 @@ function cmdAdd(opts) {
     if (!target) { console.error(`[dev-log] 未找到 Session #${contN}，无法续记`); process.exit(1); }
     const fileList = files.split(';').map((f) => f.trim()).filter(Boolean);
     const items = fileList.map((f) => `- \`${f}\``).join('\n');
-    const para = `\n### （续）${req}\n\n**改动文件**：\n${items}\n`;
+    // 与新建条目同构：可选 --theme/--summary/--issues/--commit 一并写入，不再静默丢弃
+    const issueList = opts.issues
+      ? opts.issues.split(';').map((s) => s.trim()).filter(Boolean).map((s) => `- ${s}`).join('\n')
+      : '';
+    const parts = [`### （续）${req}`, '', '**改动文件**：', items];
+    if (opts.theme) parts.push('', `**主题**：${opts.theme}`);
+    if (opts.summary) parts.push('', '**变更摘要**：', opts.summary);
+    if (issueList) parts.push('', '**遇到的问题**：', issueList);
+    if (opts.commit) parts.push('', `**commit**：${opts.commit}`);
     const lines = content.split('\n');
     // 在目标条目末尾（下一个 ## Session 或文件末尾）之前插入
     let insertIdx = lines.length;
     for (let i = target.line; i < lines.length; i++) {
       if (/^## Session/.test(lines[i])) { insertIdx = i; break; }
     }
-    lines.splice(insertIdx, 0, para.trimEnd());
+    const insertion = [];
+    if (insertIdx > 0 && lines[insertIdx - 1] !== '') insertion.push('');
+    insertion.push(parts.join('\n'), '');
+    lines.splice(insertIdx, 0, ...insertion);
     fs.writeFileSync(logFile, lines.join('\n'));
-    console.log(`[dev-log] Session #${contN} 已追加续记段落`);
+    console.log(`[dev-log] Session #${contN} 已追加续记段落${opts.summary ? '（含变更摘要）' : ''}${opts.commit ? `，commit ${opts.commit}` : ''}`);
     return;
   }
 
@@ -356,20 +370,45 @@ function cmdLink(opts) {
   if (!target) { console.error(`[dev-log] 未找到 Session #${opts.session}`); process.exit(1); }
   const lines = content.split('\n');
   const [startIdx, endIdx] = entryBodyRange(lines, target);
-  let commitIdx = -1;
+
+  // 段划分：Session 正文整体算第一段，其后每个 `### ` 标题起一段
+  // （续记自上而下按时间递增，最新一段在最后）
+  const segs = [];
+  let segStart = startIdx;
   for (let i = startIdx; i < endIdx; i++) {
+    if (/^### /.test(lines[i])) { segs.push([segStart, i]); segStart = i; }
+  }
+  segs.push([segStart, endIdx]);
+
+  let seg;
+  if (opts.section) {
+    const hits = segs.filter(([s, e]) => lines.slice(s, e).some((l) => l.includes(opts.section)));
+    if (hits.length !== 1) {
+      const cands = segs.filter(([s]) => /^### /.test(lines[s])).map(([s]) => `  ${lines[s]}`).join('\n');
+      console.error(`[dev-log] --section "${opts.section}" 匹配 ${hits.length} 段，需要唯一匹配（不给 --section 时默认挂最新一段）；候选：\n${cands}`);
+      process.exit(1);
+    }
+    seg = hits[0];
+  } else {
+    seg = segs[segs.length - 1]; // 默认：最新一段（文件靠下 = 最新）
+  }
+
+  const [segLo, segHi] = seg;
+  let commitIdx = -1;
+  for (let i = segLo; i < segHi; i++) {
     if (/\bcommit\b[\s*]*[:：]/i.test(lines[i])) { commitIdx = i; break; }
   }
   if (commitIdx >= 0) {
     lines[commitIdx] = lines[commitIdx].replace(/[0-9a-f]{7,40}/i, hash);
   } else {
-    // 去掉条目正文区末尾空行后插入 commit 行
-    let idx = endIdx;
-    while (idx > startIdx && lines[idx - 1] === '') idx--;
-    lines.splice(idx, 0, `**commit**：${hash}`);
+    // 去掉目标段末尾空行后插入 commit 行（前后留空行）
+    let idx = segHi;
+    while (idx > segLo && lines[idx - 1] === '') idx--;
+    lines.splice(idx, 0, '', `**commit**：${hash}`, '');
   }
   fs.writeFileSync(logFile, lines.join('\n'));
-  console.log(`[dev-log] Session #${target.num} 已挂 commit ${hash}`);
+  const label = /^### /.test(lines[segLo]) ? lines[segLo].slice(0, 64) : `Session #${target.num} 首段`;
+  console.log(`[dev-log] ${label} — 已挂 commit ${hash}`);
 }
 
 /* ---------- query ---------- */

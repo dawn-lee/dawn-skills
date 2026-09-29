@@ -217,6 +217,19 @@ skill 开发, obsidian-inbox, 知识库
 
 **commit**：6102f5b
 
+### （续）续记：修复 dev-log 两处缺陷——add --continue 静默丢弃可选参数、link 在多段会话上挂错段
+
+**改动文件**：
+- `skills/dev-log/scripts/dev-log.mjs - 修改, add --continue 补齐 --theme/--summary/--issues/--commit 写入（原先只拼标题+改动文件、参数静默丢弃）；link 改为按 ### 切段、默认挂 Session 内最新一段，新增 --section 按标题片段唯一匹配回填历史段；HELP 与头部注释同步`
+- `skills/dev-log/SKILL.md - 修改, 记录流程补「续记参数同样生效」与 link 三种用法/唯一匹配约束`
+
+**变更摘要**：
+缺陷一：cmdAdd 的 --continue 分支只拼「标题 + 改动文件」，传 --summary/--issues/--commit/--theme 会被静默丢弃（本会话实录：一条续记的变更摘要没进日志），现与新建模式同构补齐这些字段。缺陷二：cmdLink 假设「一条 Session 只有一个 commit」，在 Session 正文里找第一条 commit 行并替换，多段会话（如 Session #2 有 19 段）会误改最老的段——实测会把 c256e7b 覆盖掉；现按 ### 标题切段，默认挂最新一段，新增 --section 唯一匹配指定段（回填历史用），0 段或 ≥2 段报错并列出候选。
+
+**遇到的问题**：
+- 9 项临时副本测试全过：续记含摘要/问题/commit、默认挂最新段不动旧段、--section 精确替换、Session #1 单段回归、新建条目回归、index、--section 0 段与 13 段均报错退出1
+- 此前为 20 个历史段手工插入 commit 行属临时手段，脚本修好后不再需要
+
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：

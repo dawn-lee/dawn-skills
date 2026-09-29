@@ -99,6 +99,7 @@ node scripts/dev-log.mjs query 线程池
      ```bash
      node scripts/dev-log.mjs add --req "续记：..." --files "..." --continue 80
      ```
+   - `--theme` / `--summary` / `--issues` / `--commit` 在**新建与续记两种模式下都生效**（续记段落同样写入这些字段）。
 
 4. **重建头部索引**：
    ```bash
@@ -108,9 +109,12 @@ node scripts/dev-log.mjs query 线程池
 
 5. **（可选）补挂 commit**：改动已提交后可随时挂到条目：
    ```bash
-   node scripts/dev-log.mjs link <hash>            # 挂到最新一条
-   node scripts/dev-log.mjs link <hash> --session 80
+   node scripts/dev-log.mjs link <hash>                       # 挂到该 Session 最新一段（含续记）
+   node scripts/dev-log.mjs link <hash> --session 80          # 指定 Session（同样挂最新一段）
+   node scripts/dev-log.mjs link <hash> --session 80 --section "dawn 容器按项目分目录"   # 按标题片段唯一匹配某一段
    ```
+   - 多段会话里，一条 Session 下每个「（续）」段落各有一个 `commit` 行；默认挂**最新一段**（文件靠下 = 最新），回填历史段用 `--section`。
+   - `--section` 要求片段在目标 Session 内**唯一匹配**，0 段或 ≥2 段会报错并列出候选标题。
 
 ---
 
