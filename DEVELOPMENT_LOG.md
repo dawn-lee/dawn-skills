@@ -6,11 +6,11 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 跨平台: #3×6
-- 知识库: #2×28, #3×6
-- dev-log: #1×29
-- obsidian-inbox: #2×28, #3×6
-- skill 开发: #1×29, #2×28, #3×6
+- 跨平台: #3×7
+- 知识库: #2×29, #3×7
+- dev-log: #1×30
+- obsidian-inbox: #2×29, #3×7
+- skill 开发: #1×30, #2×29, #3×7
 
 ---
 ## Session #3 - 2026-09-29 16:35
@@ -92,6 +92,17 @@ obsidian-inbox, skill 开发, 知识库, 跨平台
 - `skills/dev-log/SKILL.md - 修改, 多行续行示例改单行`
 - `README.md - 修改, 结构树补新文件、Windows 环境变量写法、平台说明`
 - `.gitignore - 修改, 忽略 private-lint.json`
+
+### （续）续记：清理可分发文档里的 ~，并把「命令里用 ~」纳入红线。把 ~ 按展开方分成三类处理：① 交给 shell/第三方工具的路径（git clone 目标、cd、python 的入参等）在 Windows 的 cmd/PowerShell 下不展开——安装与迁移命令改为 clone 到当前目录、相对路径或 <占位符>，脚本自身的用法/报错提示也统一成 <占位符>；② 传给自家脚本的参数不用改，内部 expandHome 同时支持 ~ 与 ~\；③ 正文里的路径插图在 §0 统一定义「~ = 用户主目录」，技能目录与 DSH 数据根补 Windows 对照（%USERPROFILE% 形式）。加固项：expandVars 支持 Windows 风格 %VAR%（仅替换已定义且形如 %NAME% 的变量，不误伤百分号文本），并加了对应测试；selftest 的 L1 新增 shell-tilde 红线，把「第三方/ shell 命令里出现 ~」判为失败——为验证红线不是摆设，用注入方式在 README 临时加了两条违规命令，确认按条报出 2 处违规后还原。过程中还修了 L1 自身的实现缺陷：String.prototype.matchAll 要求正则带 g 标志，规则定义没加会直接抛错，抽成 allMatches 辅助函数统一补全。自检 14 → 15 项全过。
+
+**改动文件**：
+- `skills/obsidian-inbox/SKILL.md - 修改, 安装命令去 shell 展开的 ~、新增路径写法约定、技能目录/数据根补 Windows 对照`
+- `skills/obsidian-inbox/scripts/lib.mjs - 修改, expandVars 支持 %VAR% 展开`
+- `skills/obsidian-inbox/scripts/selftest.mjs - 修改, 新增 P1-7（%VAR%）与 L1 shell-tilde 红线、allMatches 辅助`
+- `skills/obsidian-inbox/scripts/init.mjs - 修改, 用法注释改占位符`
+- `skills/obsidian-inbox/scripts/install.mjs - 修改, 报错提示改占位符`
+- `skills/obsidian-inbox/scripts/note.mjs - 修改, 用法提示改占位符`
+- `README.md - 修改, 命令注释去 ~`
 ## Session #2 - 2026-09-28 11:04
 
 **需求**：
