@@ -6,11 +6,11 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 跨平台: #3×4
-- 知识库: #2×26, #3×4
-- dev-log: #1×27
-- obsidian-inbox: #2×26, #3×4
-- skill 开发: #1×27, #2×26, #3×4
+- 跨平台: #3×5
+- 知识库: #2×27, #3×5
+- dev-log: #1×28
+- obsidian-inbox: #2×27, #3×5
+- skill 开发: #1×28, #2×27, #3×5
 
 ---
 ## Session #3 - 2026-09-29 16:35
