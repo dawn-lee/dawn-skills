@@ -106,7 +106,7 @@ function cmdNew() {
     const domainHint = cfg.domainRoots.length
       ? cfg.domainRoots.map((d) => `${d}/`).join(' ')
       : '各领域目录';
-    fail(2, `归档区 ${archiveRoot}/ 由 sediment 自动维护，不放手工笔记（补归档用 ./run-sediment.sh --session <id>）；请写入 ${domainHint}`);
+    fail(2, `归档区 ${archiveRoot}/ 由 sediment 自动维护，不放手工笔记（补归档用 node scripts/sediment.mjs --session <id>，Linux/macOS 也可 ./run-sediment.sh、Windows 用 run-sediment.cmd）；请写入 ${domainHint}`);
   }
   const prefix = args['date-prefix'] === true ? `${todayStr()} ` : '';
   const relPath = normalizeRel([dirRel, `${prefix}${slug}.md`].filter(Boolean).join('/'));

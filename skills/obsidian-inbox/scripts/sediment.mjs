@@ -22,6 +22,7 @@ import {
   SKILL_DIR, STATE_DIR, loadConfig, routeDir, slugify, buildFrontmatter, atomicWrite,
   appendSection, vaultAbs, fmtTime, parseArgs, normalizeRel, listNoteIndex, sanitizeBodyLinks,
   parseFrontmatter, acquireLock, findTranscript, resolveDshBin, expandHome, dshProjcacheRoot,
+  zstdAvailable, ZSTD_HINT,
 } from './lib.mjs';
 
 // 下游提前关管道（如 `| head`）时安静退出，不要抛 EPIPE 栈
@@ -204,9 +205,15 @@ function clipSmart(text, proseMax) {
   return t.slice(0, proseMax);
 }
 
+let zstdWarned = false;
+
 function transcriptDigest(sid, budget = 30000) {
   const tr = findTranscript(sid);
   if (!tr) return null;
+  if (!zstdAvailable()) {
+    if (!zstdWarned) { zstdWarned = true; log(`提示：${ZSTD_HINT}`); }
+    return null; // 降级：退回 turnOutline 摘要
+  }
   const res = spawnSync('zstd', ['-dc', tr], { encoding: 'utf8', maxBuffer: 96 * 1024 * 1024 });
   if (res.status !== 0) return null;
   const out = [];

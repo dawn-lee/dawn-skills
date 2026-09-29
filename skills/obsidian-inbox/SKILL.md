@@ -11,7 +11,8 @@ description: 把可复用的知识沉淀进 Obsidian 知识库，也在动手前
 - 配置：`config.json`（默认在技能目录；**已 gitignore、不随仓库分发**），模板见 [config.example.json](config.example.json)
 - 脚本：[scripts/note.mjs](scripts/note.mjs)（写/查）、[scripts/sediment.mjs](scripts/sediment.mjs)（每日归档）、
   [scripts/init.mjs](scripts/init.mjs)（生成本机配置）、[scripts/install.mjs](scripts/install.mjs)（接入技能目录 + 注册调度 + 自检）
-- 运行期状态：`~/.local/state/obsidian-inbox/`（归档账本 `archived.json`、日志 `sediment.log`、headless 工作目录；**不在技能源码里**，可用 `OBSIDIAN_INBOX_STATE` 覆盖）
+- 运行期状态：Linux/macOS `~/.local/state/obsidian-inbox/`，Windows `%LOCALAPPDATA%\obsidian-inbox\`
+  （归档账本 `archived.json`、日志 `sediment.log`、headless 工作目录；**不在技能源码里**，可用 `OBSIDIAN_INBOX_STATE` 覆盖）
 
 ---
 
@@ -38,7 +39,7 @@ node scripts/install.mjs --status        # 自检：软链 / 配置 / 调度
 - **两个预设**：`simple`（默认，`notes/` 下按主题自由分层）与 `projects`（镜像 `<projectsRoot>/<容器>/<项目>`，
   容器第二级必须对应真实项目目录，`--soft <容器>` 可让它改走 `--mkdir` 流程）。当前这台机器用的是
   `projects` 预设 + 容器 `dawn`/`work`/`opensource`（见本机 config.json 的 `domainRoots`）。
-- **配置查找顺序**：`$OBSIDIAN_INBOX_CONFIG` → `<技能目录>/config.json` → `$XDG_CONFIG_HOME/obsidian-inbox/config.json`；
+- **配置查找顺序**：`OBSIDIAN_INBOX_CONFIG` → `<技能目录>/config.json` → 共享配置位置（Linux/macOS `$XDG_CONFIG_HOME/obsidian-inbox/config.json`，Windows `%APPDATA%\obsidian-inbox\`）；
   三者都没有时脚本会提示运行 `init.mjs`。配置里所有路径写 `${HOME}` 占位，**不要写死家目录**（`routes[].pattern` 同样支持）。
 - **调度**：`install.mjs` 按平台写 systemd user timer（linux）/ LaunchAgent（macOS）/ 计划任务（Windows），
   并把 node 绝对路径写进 unit/plist —— 非登录环境 PATH 极简，靠 PATH 找不到 nvm / Homebrew 里的 node。
@@ -50,11 +51,29 @@ node scripts/install.mjs --status        # 自检：软链 / 配置 / 调度
 | 环境变量 | 作用 |
 |---|---|
 | `OBSIDIAN_INBOX_CONFIG` | 指定配置文件；设了就只认它，不再回退默认位置 |
-| `OBSIDIAN_INBOX_STATE` | 归档账本 / 日志 / 锁 / headless 工作目录（默认 `$XDG_STATE_HOME/obsidian-inbox`） |
+| `OBSIDIAN_INBOX_STATE` | 归档账本 / 日志 / 锁 / headless 工作目录（默认：Linux/macOS `$XDG_STATE_HOME/obsidian-inbox`，Windows `%LOCALAPPDATA%\obsidian-inbox`） |
 | `DSH_SKILLS_DIR` | `install.mjs` 接入技能目录（默认 `~/.agents/skills`） |
 | `DSH_HOME` | DSH 数据根（默认 `~/.dsh`）：会话扫描、transcript 解压都基于它 |
 | `DSH_BIN` | dsh 可执行文件；不设则按 PATH → `~/.npm/_npx` 缓存自动探测 |
-| `OBSIDIAN_INBOX_NODE` | `run-sediment.sh` 使用的 node 路径（找不到 node 时用） |
+| `OBSIDIAN_INBOX_NODE` | `run-sediment.sh` / `run-sediment.cmd` 定位不到 node 时显式指定 |
+
+**平台差异一览** —— 代码只用 node 标准库（无 npm 依赖、无原生模块），三平台**同一套命令**，差异只在调度器与默认目录：
+
+| 项 | Linux | macOS | Windows |
+|---|---|---|---|
+| 调度 | systemd user timer | launchd LaunchAgent | 任务计划（`schtasks`） |
+| 状态目录 | `~/.local/state/obsidian-inbox/` | 同左 | `%LOCALAPPDATA%\obsidian-inbox\` |
+| 共享配置（可选） | `~/.config/obsidian-inbox/config.json` | 同左 | `%APPDATA%\obsidian-inbox\config.json` |
+| 手动归档入口 | `./run-sediment.sh …` | 同左 | `run-sediment.cmd …` |
+| 环境变量写法 | `export NAME=值` | 同左 | PowerShell `$env:NAME=值`；cmd `set NAME=值` |
+| 装完自检 | `node scripts/selftest.mjs` | 同左 | 同左 |
+
+> **没有写死的家目录路径**：配置里的路径一律 `${HOME}` / `~` 占位（由 `init.mjs` 生成），
+> `scripts/selftest.mjs` 把"写死的 `/home/<用户>`、硬编码 node 路径"当**分发红线**扫一遍，并做
+> Windows 路径兼容测试（盘符、反斜杠、非法文件名、win32 环境目录、计划任务 XML 转义）——改完代码先跑它。
+>
+> 自有标识（公司/内网词）的防回归清单放在 `private-lint.json`（**已 gitignore、不随仓库分发**），
+> 格式见 `private-lint.example.json`；没有它时 selftest 跳过该项。
 
 ---
 
@@ -95,16 +114,18 @@ node scripts/note.mjs new \
   --dir dawn/pop \
   --type troubleshooting \
   --tags "linux,fcitx5,COSMIC" \
-  --cwd "$PWD" \
   --session "$DSH_SESSION_ID" \
   --body-file -   # 正文从 stdin 读
 
 # 追加到已有笔记（--section 命中同名二级标题就写进那一段末尾，否则新建该小节）
 node scripts/note.mjs append --path "dawn/pop/输入法问题.md" --section "2026-09 补充" --body-file -
 
-# 只查路由（不确定该放哪时）
-node scripts/note.mjs route --cwd "$PWD"
+# 只查路由（不确定该放哪时；不给 --cwd 就用当前目录，三平台通用）
+node scripts/note.mjs route
 ```
+
+> **Windows**：这些命令在 PowerShell / cmd 下同样可用——多行 `\` 续行写成单行即可；
+> 环境变量写法不同（PowerShell `$env:NAME=值`、cmd `set NAME=值`），其余参数与退出码完全一致。
 
 **退出码 3 = 目标笔记已存在**，此时输出里会带 `similar` 列表；改成 `append`，或用 `--force` 明确覆盖。
 
@@ -114,7 +135,7 @@ node scripts/note.mjs route --cwd "$PWD"
 
 > **容器是配置出来的，不是写死的**：本仓库的文档用**泛化示例名**（如 `work/`）说明结构，不含真实私有目录名。
 > **本机真实的容器名、路由与目录含义一律以 `config.json` 为准**（`domainRoots` / `catalogSources` /
-> `domainNotes` / `routes` 才是真值），随时用 `node scripts/note.mjs route --cwd "$PWD"` 查当前生效的落点。
+> `domainNotes` / `routes` 才是真值），随时用 `node scripts/note.mjs route` 查当前生效的落点。
 
 本机知识库有**三个平级容器**，各自内部再分层；容器根下一律不放笔记（下表是这套结构的示例）。
 
@@ -168,7 +189,7 @@ node scripts/note.mjs route --cwd "$PWD"
 
 ```
 # 先拿候选：业务域实时读 projects/work，个人子目录读 vault 已有目录
-node scripts/note.mjs route --cwd "$PWD"          # 看路由给出的落点与含义
+node scripts/note.mjs route                        # 看路由给出的落点与含义（cwd = 当前目录）
 node scripts/note.mjs route --dir dawn --json     # 看 dawn 下已有哪些子目录
 
 # 再问：
@@ -184,7 +205,7 @@ ask_user_question("这条笔记放哪？",
 | `work/<不存在的域>`、`work/arch/<不存在的子项目>`、`opensource/<不存在的仓库>` | 报错 + 列出真实清单（`strictCatalog` 容器：**必须对应 `~/Documents/projects/` 下的真实目录**） |
 | 库外绝对路径 | 报错（`路径不在知识库内`） |
 | **不存在的分类目录** | 报错：*"写入等于新建一个分类…确认后再加 `--mkdir`；拿不准就先问用户"* |
-| `dsh-sessions/`（归档区） | 报错：归档区由 sediment 维护，不放手工笔记（补归档用 `./run-sediment.sh --session <id>`） |
+| `dsh-sessions/`（归档区） | 报错：归档区由 sediment 维护，不放手工笔记（补归档用 `node scripts/sediment.mjs --session <id>`） |
 
 `--mkdir` 是"我已确认这个分类"的显式声明——**只有用户点头之后才用它**。例外：容器的**既定分类**（`work/<业务域>`、`work/arch/<子项目>`、`dawn/<项目>`、`opensource/<仓库>`，清单来自 `catalogSources`）首次写入会自动建目录，不必确认。
 
@@ -230,27 +251,31 @@ ask_user_question("这条笔记放哪？",
 2. 拼摘要：优先用 `turnOutline`（每轮问答预览）；**老会话的投影可能为空或预览截断得极小**，此时自动回退解压 `~/.dsh/sessions/<slug>/<sid>/session.jsonl.zstd`，抽 `user/message` + `assistant/message` 的 text（跳过 reasoning）重建摘要，避免老会话被误判成"没内容"而漏归档。**代码块必须整段保留**：transcript 摘要里含代码围栏的段落不按字数截断（只裁围栏外的散文）；turnOutline 摘要若围栏不成对（=在代码中间被切），自动回退读原始 transcript；LLM 提示词明确要求代码/命令/SQL **逐字完整复制**，禁止概括与截断（踩过坑：SQL 曾因截断从知识库丢失）。
 3. 拼成摘要喂给 `dsh headless` 精炼（挂 [patch/headless-notes-only.yml](patch/headless-notes-only.yml)，**禁掉全部工具**，防止会话里夹带的外部内容触发注入）；
 4. 有价值就写成 `dsh-sessions/YYYY-MM-DD <标题>.md`（知识库顶层归档区），领域记在 frontmatter 的 `domain`（如 `work/arch/app`）；模型判断没价值则输出 `SKIP` 跳过；
-5. 状态写在 `~/.local/state/obsidian-inbox/archived.json`（按会话记录已归档轮次，同一会话后续新增的轮次会**追加补记**而不是重复建档）；归档内容有误需要重做时用 `--force`，它是**整篇覆盖重写**（不是追加补记），可纠正内容退化/空壳的归档——重写**保留**已有的 `distilled_*` 提炼标记与 H1 标题；每次真实运行会在 `sediment.log` 留一条 `[run] pid=… cwd=… argv=… window=…` 留痕（`--reindex` 不留）。
+5. 状态写在 `archived.json`（Linux/macOS `~/.local/state/obsidian-inbox/`，Windows `%LOCALAPPDATA%\obsidian-inbox\`）（按会话记录已归档轮次，同一会话后续新增的轮次会**追加补记**而不是重复建档）；归档内容有误需要重做时用 `--force`，它是**整篇覆盖重写**（不是追加补记），可纠正内容退化/空壳的归档——重写**保留**已有的 `distilled_*` 提炼标记与 H1 标题；每次真实运行会在 `sediment.log` 留一条 `[run] pid=… cwd=… argv=… window=…` 留痕（`--reindex` 不留）。
 6. **每次归档后自动重建入口页** `dsh-sessions/索引.md`（日期 / 领域 / 链接 / 会话 id 一览表 + 领域分布统计），`--reindex` 可单独重建。
 
 > ⚠ `sediment.mjs` 有 isMain 守卫，`import()` 只加载定义、**不执行**主流程（此前误 import 触发过全量归档，已修）。
-> ⚠ 有**互斥锁** `~/.local/state/obsidian-inbox/sediment.lock`：定时器/手动/平行会话共用，防并发读写账本；等锁最多 60s，拿不到退出 1；持有者超 30 分钟视为已死自动接管。`distill` 拿不到锁会立即失败（不排队）。
+> ⚠ 有**互斥锁** `状态目录/sediment.lock`（路径同上）：定时器/手动/平行会话共用，防并发读写账本；等锁最多 60s，拿不到退出 1；持有者超 30 分钟视为已死自动接管。`distill` 拿不到锁会立即失败（不排队）。
 
 手动用法：
 
 ```bash
-./run-sediment.sh --dry-run            # 只看会归档哪些会话、落到哪个文件
-./run-sediment.sh --since-hours 72     # 补跑最近三天
-./run-sediment.sh --session session-xxx  # 只处理某个会话
-./run-sediment.sh --no-llm             # 不调模型，直接落原始摘要
-./run-sediment.sh --force              # 忽略 state 重新归档
-./run-sediment.sh --min-chars 150      # 放宽"有效内容量"门槛，救回短而密的会话
-./run-sediment.sh --reindex            # 只重建 dsh-sessions/索引.md，不扫会话
+node scripts/sediment.mjs --dry-run            # 只看会归档哪些会话、落到哪个文件
+node scripts/sediment.mjs --since-hours 72     # 补跑最近三天
+node scripts/sediment.mjs --session session-xxx  # 只处理某个会话
+node scripts/sediment.mjs --no-llm             # 不调模型，直接落原始摘要
+node scripts/sediment.mjs --force              # 忽略 state 重新归档
+node scripts/sediment.mjs --min-chars 150      # 放宽"有效内容量"门槛，救回短而密的会话
+node scripts/sediment.mjs --reindex            # 只重建 dsh-sessions/索引.md，不扫会话
 ```
+
+> 上述命令**三平台通用**（node 已在 PATH 时最省事）。包装入口接受同样的参数：
+> Linux/macOS `./run-sediment.sh …`（自动在 nvm/asdf/Homebrew 里找 node）、
+> Windows `run-sediment.cmd …`（node 不在 PATH 时先 `set OBSIDIAN_INBOX_NODE=...`）。
 
 > 门槛 `minAssistantChars`（默认 300）统计的是 `turnOutline` 的**截断预览**长度，会把"轮次少但信息密度高"的会话误判成 trivial。补跑历史会话发现被跳过时，先看 `skipped` 里的 `chars`，再用 `--min-chars` 放宽后重跑。
 
-日志：`~/.local/state/obsidian-inbox/sediment.log`；调度侧自检用 `node scripts/install.mjs --status`（linux 也可 `systemctl --user status dsh-sediment` / `journalctl --user -u dsh-sediment`，macOS 看 `~/Library/LaunchAgents` 与 `sediment.err.log`）。
+日志：`状态目录/sediment.log`（`OBSIDIAN_INBOX_STATE` 或平台默认目录，见文首）；调度侧自检用 `node scripts/install.mjs --status`（linux 也可 `systemctl --user status dsh-sediment` / `journalctl --user -u dsh-sediment`，macOS 看 `~/Library/LaunchAgents` 与 `sediment.err.log`）。
 
 归档笔记的定位是**原始素材**，`dsh-sessions/` 不是索引也不是成品区：真正成体系的知识，应该在读过之后用写通道整理成主题笔记（可以顺手把归档笔记里的内容提炼过去，再决定要不要删掉原始归档）。要找归档，先看 `dsh-sessions/索引.md`，或搜标签 `#dsh/归档`。
 

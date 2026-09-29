@@ -20,29 +20,45 @@ export const DEFAULT_CONFIG_PATH = join(SKILL_DIR, 'config.json');
 /**
  * 运行期状态（归档账本、日志、headless 工作目录）**不放在技能源码里**，
  * 避免技能以软链方式接入 ~/.agents/skills 时把状态写进 git 工作区。
- * 默认 $XDG_STATE_HOME/obsidian-inbox，可用 OBSIDIAN_INBOX_STATE 覆盖。
+ * 默认按平台约定取（可用 OBSIDIAN_INBOX_STATE 覆盖）：
+ *   - Windows：%LOCALAPPDATA%\obsidian-inbox
+ *   - 其他：$XDG_STATE_HOME/obsidian-inbox（缺省 ~/.local/state/obsidian-inbox）
  */
+function defaultStateBase() {
+  if (process.platform === 'win32') {
+    return process.env.LOCALAPPDATA || join(homedir(), 'AppData', 'Local');
+  }
+  return process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state');
+}
+
 export const STATE_DIR = process.env.OBSIDIAN_INBOX_STATE
   ? resolve(process.env.OBSIDIAN_INBOX_STATE)
-  : join(process.env.XDG_STATE_HOME || join(homedir(), '.local', 'state'), 'obsidian-inbox');
+  : join(defaultStateBase(), 'obsidian-inbox');
 
-/** `$XDG_CONFIG_HOME` 下的共享配置位置（跨机同步/只读安装时用）。 */
-function xdgConfigPath() {
-  return join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'obsidian-inbox', 'config.json');
+/**
+ * 共享配置的默认位置（跨机同步/只读安装时用；OBSIDIAN_INBOX_CONFIG 优先）：
+ *   - Windows：%APPDATA%\obsidian-inbox\config.json
+ *   - 其他：$XDG_CONFIG_HOME/obsidian-inbox/config.json（缺省 ~/.config/...）
+ */
+function defaultConfigPath() {
+  const base = process.platform === 'win32'
+    ? (process.env.APPDATA || join(homedir(), 'AppData', 'Roaming'))
+    : (process.env.XDG_CONFIG_HOME || join(homedir(), '.config'));
+  return join(base, 'obsidian-inbox', 'config.json');
 }
 
 /**
  * 配置查找顺序（第一个存在的生效）：
  *   1. `$OBSIDIAN_INBOX_CONFIG` —— 显式指定；设了就**只认它**（找不到直接报错，不静默回退）
  *   2. `<技能目录>/config.json` —— 默认，本机私有
- *   3. `$XDG_CONFIG_HOME/obsidian-inbox/config.json`（或 `~/.config/...`）
+ *   3. 平台共享配置位置（见上）
  * 三者都不存在时，报错会提示运行 `scripts/init.mjs` 生成。
  */
 export function configCandidates() {
   const explicit = process.env.OBSIDIAN_INBOX_CONFIG;
   return explicit
     ? [resolve(expandHome(explicit))]
-    : [DEFAULT_CONFIG_PATH, xdgConfigPath()];
+    : [DEFAULT_CONFIG_PATH, defaultConfigPath()];
 }
 
 export function resolveConfigPath() {
@@ -149,7 +165,10 @@ export function safeDecode(s) {
 }
 
 function vaultRoot(cfg) {
-  return cfg.vault.replace(/\/+$/, '');
+  // 必须归一成 / 再比较：Windows 上 resolve() 产出反斜杠，而被比较的路径一律是
+  // 正斜杠形式（toVaultRel/sanitizeBodyLinks 都做过 replace(/\\/g,'/')），
+  // 不归一的话"库内绝对路径"会被误判成库外（实际踩过：P1-2 自检用例）
+  return String(cfg.vault).replace(/\\/g, '/').replace(/\/+$/, '');
 }
 
 /**
@@ -546,6 +565,35 @@ export function sanitizeBodyLinks(cfg, body) {
  * 让「归档 → 主题笔记」这一环可追踪，索引页据此统计积压。
  * 只动 frontmatter，不改正文；重复调用是幂等的。
  */
+// ---------------------------------------------------------------- 模板渲染与调度环境
+
+/** 模板变量替换：`{{NAME}}` → 值（未提供的变量替换为空串）。 */
+export function renderTemplate(tpl, vars) {
+  return String(tpl).replace(/\{\{(\w+)\}\}/g, (_, k) => (vars[k] === undefined ? '' : String(vars[k])));
+}
+
+/** XML 文本转义（Windows 计划任务 XML、launchd plist 都是 XML，路径里的 & 等不能裸写）。 */
+export function xmlEscape(v) {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * 写进调度器（systemd unit / launchd plist）的 PATH：非登录环境没有用户的登录 shell PATH，
+ * 至少带上 node 所在目录与各平台的常用工具目录。
+ */
+export function schedulerEnvPath(nodeBin = process.execPath) {
+  if (process.platform === 'win32') {
+    const sysroot = process.env.SystemRoot || 'C:\\Windows';
+    return [dirname(nodeBin), join(sysroot, 'system32'), join(sysroot, 'System32', 'WindowsPowerShell', 'v1.0')]
+      .join(delimiter);
+  }
+  return [dirname(nodeBin), '/usr/local/bin', '/usr/bin', '/bin'].join(delimiter);
+}
+
 // ---------------------------------------------------------------- 可执行文件定位
 
 function statSyncSafe(p) {
@@ -587,6 +635,23 @@ export function resolveDshBin(cfg = {}) {
   } catch { /* 无 npx 缓存 */ }
   return best?.p ?? null;
 }
+
+/**
+ * zstd 可执行文件探测（结果缓存）。老会话 transcript 回退与 recover 回补都要它；
+ * Windows 默认不自带 zstd，缺了会给明确提示而不是静默降级。
+ */
+let _zstdChecked = false;
+let _zstdPath = null;
+export function zstdAvailable() {
+  if (!_zstdChecked) {
+    _zstdChecked = true;
+    _zstdPath = whichSync('zstd');
+  }
+  return Boolean(_zstdPath);
+}
+
+export const ZSTD_HINT = '找不到 zstd 可执行文件：无法读取原始会话记录（老会话摘要回退、recover 代码块回补会受影响）。'
+  + ' Linux/macOS 安装 zstd 包；Windows 执行 `winget install Zstandard`（或 `scoop install zstd`）后重开终端。';
 
 // ---------------------------------------------------------------- 原始 transcript
 
@@ -639,6 +704,7 @@ export function findTranscript(sid) {
 export function transcriptCodeBlocks(sid, { minLen = 200 } = {}) {
   const tr = findTranscript(sid);
   if (!tr) return null;
+  if (!zstdAvailable()) throw new Error(ZSTD_HINT);
   const res = spawnSync('zstd', ['-dc', tr], { encoding: 'utf8', maxBuffer: 96 * 1024 * 1024 });
   if (res.status !== 0) return [];
   const out = [], seen = new Set();

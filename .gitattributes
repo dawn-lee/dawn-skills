@@ -1,0 +1,5 @@
+# 按脚本类型固定行尾，避免跨平台 checkout 互相踩（不依赖使用者的 core.autocrlf 设置）：
+#   .sh  - bash 不接受 CRLF，必须恒为 LF
+#   .cmd - cmd 解析 label/goto 需要 CRLF，必须恒为 CRLF（仓库里存 LF，检出时强制 CRLF）
+*.sh   text eol=lf
+*.cmd  text eol=crlf

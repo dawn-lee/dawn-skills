@@ -72,7 +72,9 @@ node scripts/install.mjs         # 接入 ~/.agents/skills + 注册每日归档�
 node scripts/install.mjs --status  # 自检
 ```
 
-- 真实 `config.json` 含私有路径，**不入库**；模板见 `config.example.json`，配置里用 `${HOME}` 占位。
+- **三平台通用**：`node scripts/…` 这套命令在 Linux / macOS / Windows 都一样跑（多行 `\` 续行在 Windows 写成单行）；
+  环境变量写法 PowerShell `$env:NAME=值`、cmd `set NAME=值`。装完建议跑 `node scripts/selftest.mjs` 自检。
+- 真实 `config.json` 含本机私有路径，**不入库**；模板见 `config.example.json`，配置里用 `${HOME}` 占位——**任何写死的 `/home/<用户名>` 都不允许**，否则换机器/换人即失效。
 - 归档补丁 `patch/headless-notes-only.yml` 里的 provider/密钥/模型是示例，需改成你自己的（或用配置项 `llm.patch` 指定）。
 - 其他环境变量（`OBSIDIAN_INBOX_CONFIG` / `OBSIDIAN_INBOX_STATE` / `DSH_HOME` / `DSH_BIN`）见技能内的 `SKILL.md`。
 
@@ -95,7 +97,10 @@ node scripts/install.mjs --status  # 自检
 配置环境变量：
 
 ```bash
-export DASHSCOPE_API_KEY="your-access-key"
+export DASHSCOPE_API_KEY="your-access-key"      # Linux / macOS
+```
+```powershell
+$env:DASHSCOPE_API_KEY="your-access-key"         # Windows PowerShell（cmd 用 set DASHSCOPE_API_KEY=...）
 ```
 
 **地域选择**
@@ -135,7 +140,9 @@ dawn-skills/
     ├── obsidian-inbox                          # Obsidian 知识库沉淀技能
     │   ├── SKILL.md                            # 技能描述文件（安装/配置 + 读写通道 + 定时归档）
     │   ├── config.example.json                 # 配置模板（真实 config.json 已 gitignore，不入库）
-    │   ├── run-sediment.sh                     # 手动/cron 入口（自解析 node 后执行归档）
+    │   ├── run-sediment.sh                     # 手动/cron 入口（自解析 node 后执行归档，Linux/macOS）
+    │   ├── run-sediment.cmd                    # 同上，Windows 入口（CRLF，node 不在 PATH 时可指定 OBSIDIAN_INBOX_NODE）
+    │   ├── private-lint.example.json            # 私有红线清单模板（真实 private-lint.json 已 gitignore、不入库）
     │   ├── patch
     │   │   └── headless-notes-only.yml         # 归档运行时最小权限补丁（禁用全部工具；模型段为示例）
     │   ├── templates                           # 调度模板（install.mjs 渲染）
@@ -147,6 +154,7 @@ dawn-skills/
     │       ├── note.mjs                        # 写/查通道（new/append/search/show/route/distill/recover）
     │       ├── sediment.mjs                    # 每日归档（会话 → 笔记）
     │       ├── init.mjs                        # 生成本机配置（探测知识库/项目目录，支持 simple|projects 预设）
+    │       └── selftest.mjs                    # 分发自检：Windows 路径兼容 + 分发红线（写死家目录/硬编码 node 路径）+ 私有清单扫描
     │       └── install.mjs                     # 接入 ~/.agents/skills + 注册三平台调度 + --status 自检
     └── wan2.7-video-skill                      # wan2.7视频生成技能
         ├── references

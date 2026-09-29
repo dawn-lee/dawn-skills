@@ -6,11 +6,11 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 跨平台: #3×5
-- 知识库: #2×27, #3×5
-- dev-log: #1×28
-- obsidian-inbox: #2×27, #3×5
-- skill 开发: #1×28, #2×27, #3×5
+- 跨平台: #3×6
+- 知识库: #2×28, #3×6
+- dev-log: #1×29
+- obsidian-inbox: #2×28, #3×6
+- skill 开发: #1×29, #2×28, #3×6
 
 ---
 ## Session #3 - 2026-09-29 16:35
@@ -75,6 +75,23 @@ obsidian-inbox, skill 开发, 知识库, 跨平台
 
 **改动文件**：
 - `DEVELOPMENT_LOG.md - 修改, 23 个 commit hash 第二次重映射 + 早期条目里失效表述修正`
+
+### （续）续记：跨平台兼容（Linux/macOS/Windows）与分发自检。动机：技能要能 clone 到别人的机器上直接跑，可分发文件里写死家目录路径是硬伤（换用户名/换系统即失效），公司标识也要防止被重新写进文档。改动：① 平台默认值——状态目录与共享配置目录按 platform 分支（Windows 走 %LOCALAPPDATA%/%APPDATA%，其余保持 XDG 不变），调度器 PATH 构造同样按平台（Windows 用 ; 与 system32），计划任务/launchd 模板变量统一 xmlEscape（路径含 & 不再生成坏 XML）；② 新增 Windows 手动入口 run-sediment.cmd（纯 ASCII + CRLF，批处理在 GBK 代码页下中文注释会乱码、LF-only 会解析 label 出错）；③ 修真 bug：vaultRoot() 用未归一的反斜杠路径与正斜杠比较，Windows 上库内绝对路径会被误判成库外（写测试时才发现）；④ 依赖可选化：zstd 缺失时 recover 直接报可执行提示、归档降级并告警（Windows 默认不带 zstd）；⑤ 文档与错误提示里 ./run-sediment.sh、--cwd $PWD、python3 一律改为三平台通用写法，db-sync 的解释器改为 python3 → python → py -3 顺序查找（Windows Git Bash 里通常没有 python3），并补平台要求说明；⑥ 新增 scripts/selftest.mjs：P1 用 Windows 输入喂路径逻辑、P2 子进程伪造 win32 环境验证目录解析、P3 模板与 XML 转义、L1 分发红线扫描（git 跟踪文件里出现写死家目录路径或硬编码 node 路径即失败）、L2 入口体检，14 项全过。关键取舍：自有标识清单不能直接写进入库的自检脚本（等于把脱敏掉的词重新放进公开仓库），改为外置 private-lint.json（gitignore、不入库，模板 private-lint.example.json 入库），无该文件时自动跳过该项。
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/lib.mjs - 修改, 平台化 STATE_DIR/共享配置默认值、新增 renderTemplate/xmlEscape/schedulerEnvPath、vaultRoot 反斜杠归一、zstdAvailable+ZSTD_HINT`
+- `skills/obsidian-inbox/scripts/install.mjs - 修改, 改用 lib 的渲染/转义/环境 PATH，计划任务与 plist 变量 XML 转义`
+- `skills/obsidian-inbox/scripts/note.mjs - 修改, 归档区报错提示改为三平台通用命令`
+- `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 缺 zstd 时告警一次后降级`
+- `skills/obsidian-inbox/scripts/selftest.mjs - 新增, 14 项分发自检（平台兼容 + 分发红线 + 入口体检）`
+- `skills/obsidian-inbox/run-sediment.cmd - 新增, Windows 手动入口（ASCII+CRLF）`
+- `skills/obsidian-inbox/private-lint.example.json - 新增, 私有红线清单模板`
+- `skills/obsidian-inbox/SKILL.md - 修改, 平台差异表、手动用法改 node 形式、状态目录补 Windows 路径、私有清单说明`
+- `skills/db-sync/scripts/db-sync.sh - 修改, 解释器按 python3/python/py -3 查找`
+- `skills/db-sync/SKILL.md - 修改, 平台要求与 DataGrip 目录按平台说明`
+- `skills/dev-log/SKILL.md - 修改, 多行续行示例改单行`
+- `README.md - 修改, 结构树补新文件、Windows 环境变量写法、平台说明`
+- `.gitignore - 修改, 忽略 private-lint.json`
 ## Session #2 - 2026-09-28 11:04
 
 **需求**：

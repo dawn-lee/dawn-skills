@@ -21,6 +21,20 @@ DATAGRIP_DIR="${DATAGRIP_DIR:-$HOME/Documents/datagrip/.idea}"
 DATASOURCES_XML="$DATAGRIP_DIR/dataSources.xml"
 DATASOURCES_LOCAL_XML="$DATAGRIP_DIR/dataSources.local.xml"
 
+# Python 解释器：Windows 的 Git Bash/MSYS 里通常没有 python3 命令，按优先级找一个。
+# 可用 PYTHON 环境变量显式指定（如 PYTHON="py -3"）。
+resolve_python() {
+  [ -n "${PYTHON_BIN:-}" ] && return 0
+  if [ -n "${PYTHON:-}" ]; then PYTHON_BIN="$PYTHON"; return 0; fi
+  local c
+  for c in python3 python; do
+    if command -v "$c" >/dev/null 2>&1; then PYTHON_BIN="$c"; return 0; fi
+  done
+  if command -v py >/dev/null 2>&1; then PYTHON_BIN="py -3"; return 0; fi
+  echo -e "${RED}找不到 Python 解释器（需要 python3 / python / py -3；可用 PYTHON=... 指定）${NC}" >&2
+  return 1
+}
+
 # Runtime globals (populated by parse_sources)
 declare -a DS_NAMES=()
 declare -A DS_HOST=() DS_PORT=() DS_USER=() DS_IP=() DS_DBMS=()
@@ -65,7 +79,7 @@ get_password() {
 }
 
 # ============================================================
-# DataGrip Config Parsing (via python3 inline)
+# DataGrip Config Parsing (via inline python; interpreter resolved by resolve_python)
 # ============================================================
 
 parse_sources() {
@@ -78,7 +92,9 @@ parse_sources() {
   local local_xml="$DATASOURCES_LOCAL_XML"
   [[ -f "$local_xml" ]] || local_xml=""
 
-  eval "$(python3 - "$DATASOURCES_XML" "$local_xml" << 'PYEOF'
+  resolve_python || exit 1
+  # $PYTHON_BIN 不加引号：值可能是 "py -3"（需按空格拆成两个词）
+  eval "$($PYTHON_BIN - "$DATASOURCES_XML" "$local_xml" << 'PYEOF'
 import sys, xml.etree.ElementTree as ET
 
 ds_xml, local_xml = sys.argv[1], sys.argv[2]

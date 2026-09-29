@@ -28,6 +28,7 @@ import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import {
   SKILL_DIR, STATE_DIR, parseArgs, expandHome, resolveDshBin, configCandidates, loadConfig,
+  renderTemplate, xmlEscape, schedulerEnvPath,
 } from './lib.mjs';
 
 const USAGE = `用法：
@@ -103,13 +104,10 @@ function readTemplate(rel) {
   return readFileSync(join(SKILL_DIR, 'templates', rel), 'utf8');
 }
 
-function render(tpl, vars) {
-  return tpl.replace(/\{\{(\w+)\}\}/g, (_, k) => (vars[k] === undefined ? '' : String(vars[k])));
-}
+const render = renderTemplate;
 
 function envPath() {
-  // 调度器环境里没有登录 shell 的 PATH，至少把 node 所在目录带上
-  return [dirname(NODE), '/usr/local/bin', '/usr/bin', '/bin'].join(':');
+  return schedulerEnvPath(NODE);
 }
 
 // ---------------------------------------------------------------- 技能接入
@@ -274,13 +272,15 @@ function installLaunchd(time) {
   const plistPath = launchdPath();
   const dsh = resolveDshBin({});
   const plist = render(readTemplate('launchd/com.dsh.obsidian-inbox.plist.tmpl'), {
-    NODE,
-    SKILL_DIR: skillDir,
+    NODE: xmlEscape(NODE),
+    SKILL_DIR: xmlEscape(skillDir),
     HOUR: time.hour,
     MINUTE: time.minute,
-    STATE_DIR,
-    PATH: envPath(),
-    DSH_BIN_ENTRY: dsh ? `    <key>DSH_BIN</key>\n    <string>${dsh}</string>` : '',
+    STATE_DIR: xmlEscape(STATE_DIR),
+    PATH: xmlEscape(envPath()),
+    DSH_BIN_ENTRY: dsh
+      ? `    <key>DSH_BIN</key>\n    <string>${xmlEscape(dsh)}</string>`
+      : '',
   });
   if (!dryRun) {
     mkdirSync(dirname(plistPath), { recursive: true });
@@ -319,10 +319,10 @@ function installWindows(time) {
   const xmlPath = join(STATE_DIR, 'task.xml');
   const { argv } = sedimentArgs();
   const xml = render(readTemplate('windows/task.xml.tmpl'), {
-    START: `2026-01-01T${time.text}:00`,
-    NODE,
-    ARGS: `"${argv[0]}" ${argv.slice(1).join(' ')}`,
-    SKILL_DIR: skillDir,
+    START: xmlEscape(`2026-01-01T${time.text}:00`),
+    NODE: xmlEscape(NODE),
+    ARGS: xmlEscape(`"${argv[0]}" ${argv.slice(1).join(' ')}`),
+    SKILL_DIR: xmlEscape(skillDir),
   });
   if (!dryRun) {
     mkdirSync(STATE_DIR, { recursive: true });

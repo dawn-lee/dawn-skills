@@ -22,6 +22,17 @@ description: 在数据库之间同步表数据。读取 DataGrip 配置自动发
 - **目标固定为本地** - 脚本始终写入本地 MySQL（本地客户端或 Docker 容器的 root）；交互模式可选目标数据源，但当前仅作展示，实际写入本地
 - **密码管理** - 远程数据源密码首次使用时交互输入，缓存到 `~/.config/db-sync/db-sync.conf`（格式 `<数据源名>:<密码>`，自动生成，600 权限，**勿提交**）
 
+## 平台要求
+
+| 平台 | 要求 |
+|---|---|
+| Linux / macOS | bash + `python3`（脚本按 `python3 → python → py -3` 自动找，可用 `PYTHON=...` 指定）+ 本地 `mysql`/`mysqldump` 客户端或 Docker |
+| Windows | 需 **Git Bash**（Git for Windows 自带）或 **WSL**；Git Bash 里用 `python` 即可，其余同上 |
+
+DataGrip 数据源默认读 `~/Documents/datagrip/.idea/dataSources.xml`；本机不在这个位置时用
+`DATAGRIP_DIR` 环境变量或 `--datagrip-dir` 覆盖（Windows 上 DataGrip 项目的 `.idea`
+常在 `%APPDATA%` 下或你的 DataGrip 工程目录里，形如 `--datagrip-dir "C:/path/to/project/.idea"`）。
+
 ## 使用方式
 
 ### 方式一：直接调用脚本（推荐）
@@ -46,6 +57,7 @@ bash scripts/db-sync.sh \
 
 ```bash
 python3 -c "
+# Windows(Git Bash) 把 python3 换成 python；脚本内部已自动按 python3 → python → py -3 查找
 import xml.etree.ElementTree as ET
 tree = ET.parse('$HOME/Documents/datagrip/.idea/dataSources.xml')
 for ds in tree.findall('.//data-source'):

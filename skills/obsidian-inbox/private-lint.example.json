@@ -1,0 +1,5 @@
+{
+  "_note": "私有红线清单模板。复制为 private-lint.json（已 gitignore、不随仓库分发）即可让 selftest.mjs 也校验你的自有标识：tokens 是按字面匹配的词（正则元字符会自动转义），patterns 是正则串。",
+  "tokens": ["example-internal-tool-name"],
+  "patterns": ["(?<![\\w-])acme(?![\\w-])"]
+}

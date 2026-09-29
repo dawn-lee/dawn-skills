@@ -86,13 +86,8 @@ node scripts/dev-log.mjs query 线程池
 
 3. **插入条目**（脚本自动算编号 = 现有数值 max +1，自动插入文件头部）：
    ```bash
-   node scripts/dev-log.mjs add \
-     --req "修复 xxx 问题" \
-     --files "src/a.java - 修改, 简述; src/b.java - 新增" \
-     --summary "整体说明" \
-     --issues "问题1; 问题2" \
-     --theme "callgraph, 线程池" \
-     --commit abc1234
+   # 单行写法，三平台（bash / PowerShell / cmd）都能直接粘贴执行
+   node scripts/dev-log.mjs add --req "修复 xxx 问题" --files "src/a.java - 修改, 简述; src/b.java - 新增" --summary "整体说明" --issues "问题1; 问题2" --theme "callgraph, 线程池" --commit abc1234
    ```
    - `--files` 用分号 `;` 分隔多个文件；`--issues` 同理。
    - 若本次会话**已记录过**，用 `--continue <N>` 在 Session #N 下追加「（续）」段落，不新建编号：
