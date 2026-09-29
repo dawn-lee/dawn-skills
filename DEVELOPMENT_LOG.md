@@ -6,10 +6,10 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 知识库: #2×20
-- dev-log: #1×21
-- obsidian-inbox: #2×20
-- skill 开发: #1×21, #2×20
+- 知识库: #2×21
+- dev-log: #1×22
+- obsidian-inbox: #2×21
+- skill 开发: #1×22, #2×21
 
 ---
 ## Session #2 - 2026-09-28 11:04
@@ -242,6 +242,14 @@ skill 开发, obsidian-inbox, 知识库
 - `scripts/lib.mjs - 修改, assertNoteDir 引入 strictCatalog 门控：仅 work/opensource 做"必须对应真实目录"硬校验，dawn 走软校验（已知目录放行、新主题需 --mkdir）`
 - `config.json - 修改, 新增 strictCatalog: [work, opensource]`
 - `SKILL.md - 修改, 补 --dry-run 用法、7 类落点拦截表、严格/软校验说明`
+
+### （续）续记：新增 recover 命令（代码块回源补全）并把 transcript 工具函数收敛到 lib；sediment JSON 拆出 rewritten 字段
+
+**改动文件**：
+- `scripts/lib.mjs - 修改, 新增 DSH_SESSIONS_ROOT/findTranscript/transcriptCodeBlocks（共享给两个脚本，消除重复实现）`
+- `scripts/sediment.mjs - 修改, 删除本地 findTranscript 改用 lib 版；result 新增 rewritten 数组并在 JSON/账本 runs 中独立输出（原先把 rewritten 混进 appended）`
+- `scripts/note.mjs - 修改, 新增 recover 子命令（--session/--into/--min-len/--limit/--dry-run）：解压 transcript 抽正文代码块、与目标笔记比对、缺失的追加到固定小节「代码块回补」，带锁与 dry-run`
+- `SKILL.md - 修改, D 节补 recover 用法与"精炼过的笔记会被判缺失"的注意事项`
 ## Session #1 - 2026-08-14 11:10
 
 **需求**：

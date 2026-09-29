@@ -22,14 +22,13 @@ import { fileURLToPath } from 'node:url';
 import {
   SKILL_DIR, STATE_DIR, loadConfig, routeDir, slugify, buildFrontmatter, atomicWrite,
   appendSection, vaultAbs, fmtTime, parseArgs, normalizeRel, listNoteIndex, sanitizeBodyLinks,
-  parseFrontmatter, acquireLock,
+  parseFrontmatter, acquireLock, findTranscript,
 } from './lib.mjs';
 
 const HOME = homedir();
 // 下游提前关管道（如 `| head`）时安静退出，不要抛 EPIPE 栈
 process.stdout.on('error', (err) => { if (err?.code === 'EPIPE') process.exit(0); });
 const PROJCACHE_DIR = join(HOME, '.dsh/storages/session_projcache/sessions');
-const SESSIONS_ROOT = join(HOME, '.dsh', 'sessions');
 const STATE_PATH = join(STATE_DIR, 'archived.json');
 const LOG_PATH = join(STATE_DIR, 'sediment.log');
 const PATCH_PATH = join(SKILL_DIR, 'patch', 'headless-notes-only.yml');
@@ -207,24 +206,7 @@ function substanceOf(s) {
 // ---------------------------------------------------------------- transcript 兜底
 
 /** 在 ~/.dsh/sessions/<slug>/ 下定位某会话的原始记录（文件名可能是 session.jsonl.zstd 或带版本的 session.v3/v4.jsonl.zstd）。 */
-function findTranscript(sid) {
-  try {
-    for (const slug of readdirSync(SESSIONS_ROOT)) {
-      const dir = join(SESSIONS_ROOT, slug, sid);
-      let cands = [];
-      try { cands = readdirSync(dir).filter((f) => f.endsWith('.jsonl.zstd')); } catch { continue; }
-      if (!cands.length) continue;
-      // 取最新写入的版本文件
-      let best = null, bestM = -1;
-      for (const f of cands) {
-        const st = statSyncSafe(join(dir, f));
-        if (st && st.mtimeMs > bestM) { best = f; bestM = st.mtimeMs; }
-      }
-      if (best) return join(dir, best);
-    }
-  } catch { /* 无原始记录目录 */ }
-  return null;
-}
+
 
 /**
  * 老会话可能没有 turnOutline 投影（投影功能是后加的），此时回退读原始
@@ -559,7 +541,7 @@ log(`[run] pid=${process.pid} cwd=${process.cwd()} argv=${process.argv.slice(2).
 const candidates = collectSessions(cfg, win, args);
 const result = {
   ok: true, window: win.label, dryRun, mode: dryRun ? 'dry-run' : (noLlm ? 'no-llm' : 'llm'),
-  scanned: candidates.length, created: [], appended: [], skipped: [], trivial: [], failed: [],
+  scanned: candidates.length, created: [], appended: [], rewritten: [], skipped: [], trivial: [], failed: [],
 };
 
 let dshBin = null;
@@ -654,7 +636,10 @@ for (const s of candidates) {
     note.body = sanitizeBodyLinks(cfg, note.body);
     const written = writeNote(cfg, s, note, prev, args);
     const entry = { id: s.id, title: note.title, notePath: written.notePath, turns: turnCount };
-    (written.status === 'created' ? result.created : result.appended).push(entry);
+    const bucket = written.status === 'created' ? result.created
+      : written.status === 'rewritten' ? result.rewritten
+        : result.appended;
+    bucket.push(entry);
     state.sessions[s.id] = {
       archivedAt: Date.now(),
       turnCount: s.turnCount,
@@ -679,6 +664,7 @@ if (!dryRun) {
     scanned: result.scanned,
     created: result.created.length,
     appended: result.appended.length,
+    rewritten: result.rewritten.length,
     skipped: result.skipped.length,
     failed: result.failed.length,
   });
@@ -699,6 +685,7 @@ process.stdout.write(`${JSON.stringify(args.json === true ? result : {
   index: result.index,
   created: result.created.map((x) => x.notePath || x.id),
   appended: result.appended.map((x) => x.notePath || x.id),
+  rewritten: result.rewritten.map((x) => x.notePath || x.id),
   skipped: result.skipped,
   failed: result.failed,
 }, null, 2)}\n`);

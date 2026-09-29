@@ -9,6 +9,7 @@ import {
   readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, statSync,
   renameSync, rmSync,
 } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { dirname, join, resolve, relative, basename, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
@@ -460,6 +461,63 @@ export function sanitizeBodyLinks(cfg, body) {
  * 让「归档 → 主题笔记」这一环可追踪，索引页据此统计积压。
  * 只动 frontmatter，不改正文；重复调用是幂等的。
  */
+// ---------------------------------------------------------------- 原始 transcript
+
+export const DSH_SESSIONS_ROOT = join(homedir(), '.dsh', 'sessions');
+
+/**
+ * 定位某会话的原始 transcript。文件名可能是 session.jsonl.zstd，也可能是带版本号的
+ * session.v3.jsonl.zstd（同一会话可有多个），取最新写入的那个。
+ */
+export function findTranscript(sid) {
+  try {
+    for (const slug of readdirSync(DSH_SESSIONS_ROOT)) {
+      const dir = join(DSH_SESSIONS_ROOT, slug, sid);
+      let cands = [];
+      try { cands = readdirSync(dir).filter((f) => f.endsWith('.jsonl.zstd')); } catch { continue; }
+      if (!cands.length) continue;
+      let best = null, bestM = -1;
+      for (const f of cands) {
+        let m = -1;
+        try { m = statSync(join(dir, f)).mtimeMs; } catch { /* 读不到就跳过 */ }
+        if (m > bestM) { best = f; bestM = m; }
+      }
+      if (best) return join(dir, best);
+    }
+  } catch { /* 没有 sessions 目录 */ }
+  return null;
+}
+
+/**
+ * 抽原始 transcript 里助手**正文**（跳过 reasoning）的代码围栏块，按内容去重、长的在前。
+ * 找不到 transcript 返回 null（与"有记录但没代码块"的 [] 区分开）。
+ */
+export function transcriptCodeBlocks(sid, { minLen = 200 } = {}) {
+  const tr = findTranscript(sid);
+  if (!tr) return null;
+  const res = spawnSync('zstd', ['-dc', tr], { encoding: 'utf8', maxBuffer: 96 * 1024 * 1024 });
+  if (res.status !== 0) return [];
+  const out = [], seen = new Set();
+  for (const line of String(res.stdout ?? '').split('\n')) {
+    if (!line.trim()) continue;
+    let e;
+    try { e = JSON.parse(line); } catch { continue; }
+    if (e.type !== 'assistant/message') continue;
+    for (const p of e.data?.message?.content ?? []) {
+      if (!p || typeof p !== 'object' || p.type !== 'text') continue;
+      for (const m of String(p.text ?? '').matchAll(/```[a-zA-Z0-9_-]*\n([\s\S]*?)```/g)) {
+        const b = m[1].trim();
+        if (b.length < minLen) continue;
+        if (seen.has(b)) continue;
+        seen.add(b);
+        out.push(b);
+      }
+    }
+  }
+  out.sort((a, b) => b.length - a.length);
+  return out;
+}
+
 /**
  * 归档互斥锁：账本 archived.json、归档笔记都是"读-改-写"，定时器 / 手动 / 平行会话
  * 并行跑会互相覆盖。锁文件在 STATE_DIR/sediment.lock；持有超过 30 分钟视为已死

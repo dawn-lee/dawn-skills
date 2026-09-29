@@ -10,6 +10,7 @@
  *   node scripts/note.mjs show   --path "dawn/x.md" [--json]
  *   node scripts/note.mjs route  --cwd /abs/path [--json]
  *   node scripts/note.mjs distill --path "dsh-sessions/x.md" --into "[[主题笔记]]" [--note 说明] [--json]
+ *   node scripts/note.mjs recover --session <会话id> --into "[[主题笔记]]" [--min-len 300] [--limit 20] [--dry-run] [--json]
  *
  * 退出码：0 成功 / 2 用法错误 / 3 目标已存在（需 --append 或 --force） / 4 未找到
  */
@@ -19,7 +20,7 @@ import {
   loadConfig, routeDir, slugify, buildFrontmatter, atomicWrite, readNote,
   searchNotes, findExistingByTitle, appendSection, vaultAbs, fmtTime, parseArgs,
   readBodyArg, normalizeRel, assertNoteDir, listSubdirs, catalogEntries, assertDirReady,
-  markDistilled, listNoteIndex, parseFrontmatter, acquireLock,
+  markDistilled, listNoteIndex, parseFrontmatter, acquireLock, transcriptCodeBlocks,
 } from './lib.mjs';
 
 // 下游提前关管道（如 `| head -1`）时安静退出，不要抛 EPIPE 栈
@@ -60,7 +61,8 @@ try {
     process.exit(0);
   }
   const handlers = {
-    new: cmdNew, append: cmdAppend, search: cmdSearch, show: cmdShow, route: cmdRoute, distill: cmdDistill,
+    new: cmdNew, append: cmdAppend, search: cmdSearch, show: cmdShow, route: cmdRoute,
+    distill: cmdDistill, recover: cmdRecover,
   };
   const handler = handlers[cmd];
   if (!handler) {
@@ -219,6 +221,67 @@ function cmdDistill() {
     ? `${JSON.stringify({ ok: true, ...res, ...(calibrated ? { calibrated } : {}) }, null, 2)}\n`
     : `${res.path} → 已标记提炼到 ${res.into}`
       + `${calibrated ? `\n  domain 校准：${calibrated.from} → ${calibrated.to}` : ''}\n`);
+}
+
+/**
+ * recover —— 归档时被截断/丢失的代码块，从原始 transcript 回补到目标主题笔记。
+ * 与 recover 前的老做法（一次性脚本）等价，但成为可复用命令。
+ */
+function cmdRecover() {
+  if (typeof args.session !== 'string' || !args.session.trim()) fail(2, 'recover 需要 --session（DSH 会话 id）');
+  if (typeof args.into !== 'string' || !args.into.trim()) {
+    fail(2, 'recover 需要 --into（目标主题笔记，如 "[[内部工具开发笔记]]"）');
+  }
+  const sid = args.session.trim();
+  const intoName = args.into.replace(/^\[\[/, '').replace(/\]\]$/, '').split('|')[0].trim();
+  const hit = listNoteIndex(cfg, 100000).find((p) => basename(p, '.md') === intoName);
+  if (!hit) fail(4, `目标笔记不存在：${intoName}（recover 只往已存在的笔记里补）`);
+  if (normalizeRel(hit).startsWith(`${cfg.archiveDir}/`)) {
+    fail(2, `recover 的目标应是主题笔记，不是归档区笔记：${hit}`);
+  }
+  const absPath = vaultAbs(cfg, hit);
+  const dryRun = args['dry-run'] === true;
+  const minLen = Number(args['min-len']) > 0 ? Number(args['min-len']) : 300;
+  const limit = Number(args.limit) > 0 ? Number(args.limit) : 20;
+
+  const blocks = transcriptCodeBlocks(sid, { minLen });
+  if (blocks === null) fail(4, `找不到会话 ${sid} 的原始记录（transcript），无法回补`);
+  const existing = readFileSync(absPath, 'utf8');
+  const missing = blocks
+    .filter((b) => !existing.includes(b.slice(0, Math.min(200, b.length))))
+    .slice(0, limit);
+
+  if (!missing.length) {
+    const out = { ok: true, session: sid, target: hit, candidates: blocks.length, recovered: 0, dryRun: dryRun || undefined };
+    process.stdout.write(json
+      ? `${JSON.stringify(out, null, 2)}\n`
+      : `无缺失代码块（原文 ${blocks.length} 块 ≥${minLen} 字，${hit} 已覆盖）\n`);
+    return;
+  }
+
+  const release = acquireLock({ waitMs: 0 });
+  if (!release) fail(2, '归档进程正在运行（锁被占用），稍后重试 recover');
+  process.on('exit', () => release());
+  try {
+    if (!dryRun) {
+      const body = [
+        `> 由 \`recover\` 从原始会话 \`${sid}\` 回补：这些代码块在归档时被截断/丢失。`,
+        '',
+        ...missing.flatMap((b, i) => [`### ${i + 1}. 代码块（${b.length} 字）`, '', '```', b, '```', '']),
+      ].join('\n');
+      appendSection(absPath, '代码块回补', body);
+    }
+  } finally {
+    release();
+  }
+  const bytes = missing.reduce((n, b) => n + b.length, 0);
+  const out = {
+    ok: true, session: sid, target: hit, candidates: blocks.length,
+    recovered: missing.length, bytes, dryRun: dryRun || undefined,
+  };
+  process.stdout.write(json
+    ? `${JSON.stringify(out, null, 2)}\n`
+    : `${dryRun ? '[dry-run] ' : ''}${hit}：回补 ${missing.length}/${blocks.length} 个代码块（${bytes} 字）\n`);
 }
 
 function cmdRoute() {
