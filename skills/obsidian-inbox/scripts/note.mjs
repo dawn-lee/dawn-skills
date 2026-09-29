@@ -37,7 +37,7 @@ const USAGE = `用法：
 
 首次使用 / 换电脑：
   node scripts/init.mjs          # 生成 config.json（探测知识库；--preset simple|projects）
-  node scripts/install.mjs       # 接入 ~/.agents/skills + 注册每日归档；--status 自检`;
+  node scripts/install.mjs       # 接入技能目录 + 注册每日归档；--status 自检`;
 
 function fail(code, message, extra = {}) {
   process.stdout.write(`${JSON.stringify({ ok: false, error: message, ...extra }, null, 2)}\n`);

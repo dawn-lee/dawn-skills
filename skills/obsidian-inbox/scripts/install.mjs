@@ -193,7 +193,7 @@ function ensureConfig() {
     return {
       ok: false,
       message: `自动初始化失败（可能探测不到知识库）：请手动运行\n`
-        + `  node ${initScript} --vault "~/你的知识库"\n`
+        + `  node ${initScript} --vault <知识库路径>   # <...> 是占位符，换成你的知识库路径\n`
         + `${String(res.stdout ?? res.stderr ?? '').trim().slice(-400)}`,
     };
   }

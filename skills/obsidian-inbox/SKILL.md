@@ -21,20 +21,26 @@ description: 把可复用的知识沉淀进 Obsidian 知识库，也在动手前
 技能代码里**不含任何机器相关路径**，换电脑就是 clone + 两次命令：
 
 ```bash
-git clone https://github.com/dawn-lee/dawn-skills.git ~/Documents/projects/dawn/dawn-skills
-cd ~/Documents/projects/dawn/dawn-skills/skills/obsidian-inbox
+# 先 clone 到当前目录（不写目标路径 = 三平台都能跑；想放别处就自己指定，路径不要用 ~）
+git clone https://github.com/dawn-lee/dawn-skills.git
+cd dawn-skills/skills/obsidian-inbox      # Windows cmd 同样接受 / 分隔
 
-node scripts/init.mjs                    # 探测知识库，生成 config.json（默认 simple 预设）
-node scripts/init.mjs --preset projects  # 镜像 ~/Documents/projects/<容器>/<项目> 的目录结构
-node scripts/init.mjs --from-config ~/old-config.json --force   # 迁移旧机器配置（家目录改写成 ${HOME}）
-node scripts/install.mjs                 # 软链到 ~/.agents/skills + 注册每日归档
-node scripts/install.mjs --status        # 自检：软链 / 配置 / 调度
+node scripts/init.mjs                     # 探测知识库，生成 config.json（默认 simple 预设）
+node scripts/init.mjs --preset projects   # 镜像 <项目根>/<容器>/<项目> 的目录结构
+node scripts/init.mjs --from-config <旧配置文件路径> --force   # 迁移上一台机器的配置
+node scripts/install.mjs                  # 接入技能目录 + 注册每日归档
+node scripts/install.mjs --status         # 自检：技能接入 / 配置 / 调度
 ```
+
+> **路径写法约定**：下文的 `~` 一律表示用户主目录（Windows 即 `C:\Users\<你>` / `%USERPROFILE%`）。
+> **传给我们脚本的参数**写 `~/…`、`~\…` 或 `${HOME}/…` 都安全——`init.mjs` / `install.mjs` / `note.mjs` 内部会展开；
+> 但**交给第三方工具或 shell 的路径**（`git clone` 目标、`cd`、`cp`…）**不要用 `~`**，
+> 因为 Windows 的 cmd / PowerShell 不展开它（Linux/macOS 的 shell 才展开）。
 
 > 你自己有多台机器时推荐 `--from-config`：把上一台的 config.json 带过来直接迁移，
 > 手写调过的 `domainNotes`（主题目录登记）和路由例外都能原样保留。
 
-- **源码与安装**：`~/.agents/skills/obsidian-inbox` 指向仓库源码的软链（`dsh-skill-filesystem` 会跟随符号链接发现技能）。
+- **源码与安装**：技能目录（默认 Linux/macOS `~/.agents/skills/obsidian-inbox`，Windows `%USERPROFILE%\.agents\skills\obsidian-inbox`）里是一条指向仓库源码的软链（`dsh-skill-filesystem` 会跟随符号链接发现技能；目录可用 `DSH_SKILLS_DIR` 改）。
   在仓库里改代码即刻生效，不需要重新安装；Windows 没有软链权限时用 `--copy` 复制安装。
 - **两个预设**：`simple`（默认，`notes/` 下按主题自由分层）与 `projects`（镜像 `<projectsRoot>/<容器>/<项目>`，
   容器第二级必须对应真实项目目录，`--soft <容器>` 可让它改走 `--mkdir` 流程）。当前这台机器用的是
@@ -52,9 +58,9 @@ node scripts/install.mjs --status        # 自检：软链 / 配置 / 调度
 |---|---|
 | `OBSIDIAN_INBOX_CONFIG` | 指定配置文件；设了就只认它，不再回退默认位置 |
 | `OBSIDIAN_INBOX_STATE` | 归档账本 / 日志 / 锁 / headless 工作目录（默认：Linux/macOS `$XDG_STATE_HOME/obsidian-inbox`，Windows `%LOCALAPPDATA%\obsidian-inbox`） |
-| `DSH_SKILLS_DIR` | `install.mjs` 接入技能目录（默认 `~/.agents/skills`） |
-| `DSH_HOME` | DSH 数据根（默认 `~/.dsh`）：会话扫描、transcript 解压都基于它 |
-| `DSH_BIN` | dsh 可执行文件；不设则按 PATH → `~/.npm/_npx` 缓存自动探测 |
+| `DSH_SKILLS_DIR` | `install.mjs` 接入技能目录（默认 `~/.agents/skills`，Windows `%USERPROFILE%\.agents\skills`） |
+| `DSH_HOME` | DSH 数据根（默认 `~/.dsh`，Windows `%USERPROFILE%\.dsh`）：会话扫描、transcript 解压都基于它 |
+| `DSH_BIN` | dsh 可执行文件；不设则按 PATH → npx 缓存（`~/.npm/_npx`，三平台同位置）自动探测 |
 | `OBSIDIAN_INBOX_NODE` | `run-sediment.sh` / `run-sediment.cmd` 定位不到 node 时显式指定 |
 
 **平台差异一览** —— 代码只用 node 标准库（无 npm 依赖、无原生模块），三平台**同一套命令**，差异只在调度器与默认目录：

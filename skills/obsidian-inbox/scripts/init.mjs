@@ -7,9 +7,9 @@
  *
  * 用法：
  *   node scripts/init.mjs                          # 探测知识库 + simple 预设（默认）
- *   node scripts/init.mjs --vault "~/我的知识库"
+ *   node scripts/init.mjs --vault <知识库路径>      # <...> 是占位符，换成你的真实路径（三平台都行）
  *   node scripts/init.mjs --preset projects        # 镜像 ~/Documents/projects/<容器>/<项目>
- *   node scripts/init.mjs --preset projects --projects-root ~/code --containers work,personal
+ *   node scripts/init.mjs --preset projects --projects-root <项目根路径> --containers work,personal
  *   node scripts/init.mjs --preset projects --soft personal   # personal 允许 --mkdir 新主题目录
  *   node scripts/init.mjs --print                  # 只打印 JSON，不落盘
  *   node scripts/init.mjs --out /tmp/c.json --force
@@ -176,7 +176,7 @@ function toHomeToken(s) {
 /**
  * 迁移已有配置：把写死的家目录改写成 `${HOME}` 占位，其余字段原样保留。
  * 换到自己的第二台机器时最省事：把旧 config.json 带过去，跑
- * `init.mjs --from-config ~/old-config.json --force` 即可继续用同一套目录体系。
+ * `init.mjs --from-config <旧配置文件路径> --force` 即可继续用同一套目录体系。
  * 只改写确实含路径的字段（vault / catalogSources / routes / excludeCwdPrefixes），
  * domainNotes 是说明文字，不动。
  */
@@ -294,7 +294,7 @@ const out = {
   defaultDir: cfg.defaultDir,
   createdDirs: created,
   next: [
-    `node ${join(SKILL_DIR, 'scripts', 'install.mjs')}        # 装入 ~/.agents/skills 并注册每日归档`,
+    `node ${join(SKILL_DIR, 'scripts', 'install.mjs')}        # 接入技能目录并注册每日归档`,
     '首次使用前确认 patch/headless-notes-only.yml 里的模型与密钥环境变量与你的 DSH 一致',
   ],
 };

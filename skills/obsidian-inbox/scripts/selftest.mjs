@@ -15,7 +15,7 @@
  *   P1 平台无关路径逻辑（用 Windows 输入喂）
  *   P2 模拟 win32 运行环境（子进程里伪造 process.platform + LOCALAPPDATA/APPDATA）
  *   P3 调度模板渲染（占位符、XML 转义、无残留占位符）
- *   L1 分发红线（扫描可分发文件：写死路径 / 硬编码 node 路径 / 私有清单 token）
+ *   L1 分发红线（扫描可分发文件：写死路径 / 硬编码 node 路径 / 命令里的 ~ / 私有清单 token）
  *   L2 入口文件体检（.sh 可执行位；.cmd 必须 CRLF + 纯 ASCII）
  *
  * 退出码：0 全部通过 / 1 有失败项
@@ -90,6 +90,22 @@ check('P1-6', '调度 PATH 用平台分隔符（Windows 为 ;、POSIX 为 :）',
   const sep = p.includes(delimiter) ? delimiter : null;
   assert(sep, `PATH 里没有平台分隔符 ${JSON.stringify(p)}`);
   if (process.platform !== 'win32') assert(p.startsWith('/fake'), `应以 node 所在目录开头：${p}`);
+});
+
+check('P1-7', 'Windows 风格 %VAR% 占位可展开（未定义的变量原样保留）', () => {
+  process.env.OI_SELFTEST_HOME = 'C:\\Users\\tester';
+  try {
+    const ok = expandVars('%OI_SELFTEST_HOME%\\docs\\notes');
+    assert(ok === 'C:\\Users\\tester\\docs\\notes', `展开结果=${JSON.stringify(ok)}`);
+    const keep = expandVars('%OI_NOT_DEFINED%/x');
+    assert(keep === '%OI_NOT_DEFINED%/x', `未定义变量应原样保留：${keep}`);
+    const pct = expandVars('覆盖率 100% 完成');
+    assert(pct === '覆盖率 100% 完成', `不该误伤普通百分号：${pct}`);
+    const mixed = expandVars('${HOME}/%OI_SELFTEST_HOME%');
+    assert(!mixed.includes('${HOME}'), 'HOME 占位未展开：' + mixed);
+  } finally {
+    delete process.env.OI_SELFTEST_HOME;
+  }
 });
 
 // ------------------------------------------------------------ P2 模拟 win32 运行环境
@@ -199,12 +215,25 @@ const RED_LINES = [
     why: '写死的 /home/<用户名> 路径；可分发文件里必须用 ${HOME} 或 ~',
   },
   {
+    id: 'shell-tilde',
+    // 这些命令/工具会在 cmd、PowerShell 里直接跑，它们不展开 ~；
+    // 我们自己的 node scripts/… 允许 ~（内部 expandHome 展开），bash/sh 也允许（Git Bash 会展开）
+    re: /^[ \t]*(?:git|cd|ln|cp|mv|rm|cat|mkdir|touch|tar|find|grep|scp|rsync|mysql|mysqldump|python3?|pip3?|docker)\b[^\n]*[~][\/\\]/gm,
+    why: '命令里的 ~ 由 shell 展开，但 Windows 的 cmd/PowerShell 不展开；改用相对路径或 <占位符>',
+  },
+  {
     id: 'posix-node',
     re: /\/(?:usr|local)\/bin\/node/,
     why: '写死的 node 绝对路径；run-sediment.sh 的“定位逻辑”是它自己的任务，其余位置不该出现',
     allow: [join(REPO_ROOT, 'skills', 'obsidian-inbox', 'run-sediment.sh')],
   },
 ];
+
+/** 取得正则的全部匹配：matchAll 要求 g 标志，规则定义里忘了加时自动补一个克隆。 */
+function allMatches(text, re) {
+  const g = re.global ? re : new RegExp(re.source, `${re.flags}g`);
+  return [...text.matchAll(g)];
+}
 
 /**
  * 私有红线（**不随仓库分发**）：自己的公司/内网标识清单，防止脱敏后被重新写进文档。
@@ -238,8 +267,13 @@ if (!skipScrub) {
       try { text = readFileSync(f, 'utf8'); } catch { continue; }
       for (const rule of [...RED_LINES, ...(priv?.rules ?? [])]) {
         if (rule.allow?.includes(f)) continue;
-        const m = text.match(rule.re);
-        if (m) hits.push(`${f.replace(REPO_ROOT + '/', '')} → ${rule.id}：“${String(m[0]).slice(0, 40)}”（${rule.why}）`);
+        const ms = allMatches(text, rule.re);
+        if (!ms.length) continue;
+        const rel = f.replace(REPO_ROOT + '/', '');
+        for (const m of ms.slice(0, 5)) {
+          hits.push(`${rel} → ${rule.id}：“${String(m[0]).replace(/\s+/g, ' ').slice(0, 40)}”（${rule.why}）`);
+        }
+        if (ms.length > 5) hits.push(`${rel} → ${rule.id}：另有 ${ms.length - 5} 处`);
       }
     }
     assert(hits.length === 0, `发现 ${hits.length} 处违规：\n    ${hits.join('\n    ')}`);

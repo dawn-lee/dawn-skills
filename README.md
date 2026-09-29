@@ -67,8 +67,8 @@ crawl4ai-setup
 ```bash
 cd dawn-skills/skills/obsidian-inbox
 node scripts/init.mjs            # 探测 Obsidian 知识库，生成 config.json（simple 预设）
-node scripts/init.mjs --preset projects   # 或镜像 ~/Documents/projects/<容器>/<项目> 结构
-node scripts/install.mjs         # 接入 ~/.agents/skills + 注册每日归档（systemd/launchd/计划任务）
+node scripts/init.mjs --preset projects   # 或镜像 <项目根>/<容器>/<项目> 结构
+node scripts/install.mjs         # 接入技能目录 + 注册每日归档（systemd/launchd/计划任务）
 node scripts/install.mjs --status  # 自检
 ```
 

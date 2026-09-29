@@ -83,7 +83,13 @@ export function expandHome(p) {
  */
 export function expandVars(p) {
   if (typeof p !== 'string') return p;
-  return expandHome(p.replace(/\$\{HOME\}|\$HOME/g, homedir().replace(/\\/g, '/')));
+  let out = p.replace(/\$\{HOME\}|\$HOME/g, homedir().replace(/\\/g, '/'));
+  // Windows 风格 %VAR%（如 %USERPROFILE%、%APPDATA%）：只替换**已定义**的变量，
+  // 变量名必须以字母/下划线开头，避免误伤 "50%"、"100%off" 这类文本
+  out = out.replace(/%([A-Za-z_][A-Za-z0-9_]*)%/g, (m, name) => (
+    process.env[name] !== undefined ? process.env[name] : m
+  ));
+  return expandHome(out);
 }
 
 function escapeRegExp(s) {
