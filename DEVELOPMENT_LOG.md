@@ -252,7 +252,7 @@ sessions/ 汇聚多 agent 后，索引表缺「来源」列看不出每条来自
 - `reflog/gc - 过期并回收旧历史对象`
 
 **变更摘要**：
-用户问『git 提交记录问题修复了吗，不要暴露我的公司信息』，全维度复扫抓到一处此前漏网的：「通义灵码」（公司产品名）藏在 0861003 提交的内容里（该条是 agentAdapter 别名的 dev-log 记录，我写条目时把产品名带进去了）；其后 adfc86c 泛化 cic 时漏了这个词。根因是此前的 L1 红线只扫工作区文件，不扫提交历史内容——git log -S 才能暴露。修复：先建备份 bundle（~/dawn-skills-pre-fix-20260930-1735.bundle），再 filter-branch 限定 0861003~1..HEAD 对 DEVELOPMENT_LOG.md 做文本替换（只动这 1 个文件 1 个词，其余 71 个提交零改动），最后删 refs/original、reflog expire、gc --prune=now 让旧历史物理不可读。验证 5 维度全绿：提交信息 0 命中、全历史文件内容 git log -S/-G 逐词 0、引用名/stash 0、作者身份全为个人身份（可保留）、不可达对象 0。提交数仍 76（改写只动内容不动结构），HEAD 变为 cecd305。
+用户问『git 提交记录问题修复了吗，不要暴露我的公司信息』，全维度复扫抓到一处此前漏网的：某公司产品名藏在 0861003 提交的内容里（该条是 agentAdapter 别名的 dev-log 记录，我写条目时把产品名带进去了）；其后 adfc86c 泛化独立容器名时漏了这个词。根因是此前的 L1 红线只扫工作区文件，不扫提交历史内容——git log -S 才能暴露。修复：先建备份 bundle（~/dawn-skills-pre-fix-20260930-1735.bundle），再 filter-branch 限定 0861003~1..HEAD 对 DEVELOPMENT_LOG.md 做文本替换（只动这 1 个文件 1 个词，其余 71 个提交零改动），最后删 refs/original、reflog expire、gc --prune=now 让旧历史物理不可读。验证 5 维度全绿：提交信息 0 命中、全历史文件内容 git log -S/-G 逐词 0、引用名/stash 0、作者身份全为个人身份（可保留）、不可达对象 0。提交数仍 76（改写只动内容不动结构），HEAD 变为 cecd305。
 
 **遇到的问题**：
 - 盲区：私有信息扫描此前只覆盖工作区（selftest L1），没覆盖提交历史内容——git log -S 是必须补的一环，本次靠用户追问才暴露；今后红线扫描应加一条『全历史 log -S/-G 逐词』。改写前必须建 bundle 备份（本次 321K，验证 OK 后待删）。filter-branch 范围用 0861003~1..HEAD 是位置配对，改写后 SHA 全变，验证时要分清『当前 main』与 refs/original 备份——初次 log --all 扫到的 2 个命中其实是 filter-branch 的旧备份引用，删掉 original 后归零。用户已自行推送（远端从 4e2226a 更新），本机 pending 为备份 bundle 待删。
