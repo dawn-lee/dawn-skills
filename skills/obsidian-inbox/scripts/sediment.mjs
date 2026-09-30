@@ -315,11 +315,32 @@ function rawNote(s, digest) {
  * 不跟着领域目录走：这样领域容器（domainRoots）保持纯领域结构。
  * 会话归属的领域（如 `dawn/pop`、`work/service`）记进 frontmatter 的 domain 字段。
  */
+/**
+ * 状态里记的 notePath 失效时（归档区改名 / 平铺改分层 / 手动重命名），按会话 id 在
+ * 归档区递归找回已归档笔记——归档笔记 frontmatter 带 `session: <id>`。找不到返回 null。
+ * 动机：只靠"重算文件名恰好撞上现有文件"判定是否重复，改名或手动重命名后会重复建档。
+ */
+function findArchivedNoteBySession(cfg, sid) {
+  if (!sid) return null;
+  const base = cfg.archiveDir ? normalizeRel(cfg.archiveDir) : '';
+  if (!base) return null;
+  const absDir = vaultAbs(cfg, base);
+  for (const rel of walkMd(absDir, '')) {
+    let raw;
+    try { raw = readFileSync(join(absDir, rel), 'utf8'); } catch { continue; }
+    const { fields } = parseFrontmatter(raw);
+    if (String(fields.session ?? '') === String(sid)) return normalizeRel(`${base}/${rel}`);
+  }
+  return null;
+}
+
 function writeNote(cfg, s, note, prev, args) {
   const dateStr = fmtTime(s.lastPromptAt, false);
   const explicitDir = typeof args.dir === 'string' ? args.dir : null;
   const domain = routeDir(cfg, s.cwd, explicitDir);
   let notePath = prev?.notePath && existsSync(vaultAbs(cfg, prev.notePath)) ? prev.notePath : null;
+  // 路径失效但确实归档过 → 按会话 id 找回，避免改名/迁移后重复建档
+  if (!notePath && prev?.notePath) notePath = findArchivedNoteBySession(cfg, s.id);
   if (!notePath) {
     // 归档按来源 agent 分层：sessions/<agent>/<日期 标题>.md（--dir 显式指定时跳过）
     const base = cfg.archiveDir ? normalizeRel(cfg.archiveDir) : '';

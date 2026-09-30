@@ -29,7 +29,10 @@ function normalize(file, j) {
   const outline = v('turnOutline') ?? {};
   const turns = Array.isArray(outline.turns) ? outline.turns : [];
   return makeSession({
-    id: file.replace(/^session-/, '').replace(/\.json$/, ''),
+    // id 必须与状态账本/归档 frontmatter 的会话标识一致，即**保留 `session-` 前缀**
+    // （原 normalizeSession 用 basename(file,'.json')）。曾误剥前缀，导致 84 个已归档
+    // 会话的 id 与 archived.json 的键全部对不上 → 会被当新会话重复归档。
+    id: file.replace(/\.json$/, ''),
     cwd: identity.cwd ?? '',
     createdAt: toMs(identity.createdAt),
     lastPromptAt: toMs(md.lastPromptAt || identity.createdAt),

@@ -215,6 +215,38 @@ check('P4-1', '四个 adapter 都产出契约字段（id/cwd/turns）且统一�
   return `执行 ${ran.length} 个；样本 ${seen.join(' ')}`;
 });
 
+check('P4-3', 'dsh adapter 的会话 id 保留 session- 前缀（须与账本/归档一致）', async () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'oi-dshid-'));
+  const oldHome = process.env.DSH_HOME;
+  try {
+    const dir = join(tmp, 'storages', 'session_projcache', 'sessions');
+    mkdirSync(dir, { recursive: true });
+    // 与真实投影缓存同形的最小样本
+    writeFileSync(join(dir, 'session-abc123.json'), JSON.stringify({
+      record: {
+        identity: { cwd: '/tmp/x', createdAt: 1767312000000 },
+        rows: {
+          sessionListMetadata: { val: { lastPromptAt: 1767312000000 } },
+          sessionStats: { val: { lastTurn: 1 } },
+          turnOutline: { val: { turns: [{ turn: 1, prompt: 'p', response: 'r' }] } },
+          title: { val: 't' },
+        },
+      },
+    }), 'utf8');
+    process.env.DSH_HOME = tmp;
+    const m = await import(join(SKILL_DIR, 'scripts', 'adapters', 'dsh.mjs'));
+    const list = m.listSessions({ archiveDir: 'sessions', excludeCwdPrefixes: [] },
+      { from: 0, to: Date.now() + 3600 * 1000 }, {});
+    assert(list.length === 1, `应解析出 1 个会话，实际 ${list.length}`);
+    assert(list[0].id === 'session-abc123',
+      `id 必须保留 session- 前缀（账本 archived.json 的键与归档 frontmatter 都用这个形式），实际「${list[0].id}」`);
+    return `id=${list[0].id}`;
+  } finally {
+    if (oldHome === undefined) delete process.env.DSH_HOME; else process.env.DSH_HOME = oldHome;
+    rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
 check('P4-2', 'agentAdapter 多值与未知值处理（逗号分隔 / 未登记报错）', async () => {
   const { resolveAgents } = await import(join(SKILL_DIR, 'scripts', 'adapters', 'index.mjs'));
   const a = resolveAgents({ agentAdapter: 'dsh,qoder' });
