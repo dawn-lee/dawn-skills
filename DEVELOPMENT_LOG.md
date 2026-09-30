@@ -175,6 +175,19 @@ sessions/ 汇聚多 agent 后，索引表缺「来源」列看不出每条来自
 **遇到的问题**：
 - 标签泛化时要特别小心别误伤 source：tags 从 dsh/ 归档 改 archive/ 归档，但 source 必须保留 agent（qoder/dsh/codex）——两者都带前缀斜杠，正则容易一起替换。验证多 agent 列显示时，归档会话会同时重建索引使索引.md 时间戳最新，ls -t 取首篇会拿到索引而非目标笔记，需排除索引文件。列数校验用 awk -F'|' '{NF-1}' 会把行首尾空段多数一个，正确做法是 split 后取 [1:-1]。
 
+### （续）续记：归档按来源 agent 分层（sessions/<agent>/）
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/sediment.mjs - 修改, writeNote/dry-run 写入落 sessions/<agent>/、新增 walkMd 递归扫子目录、索引 entries 加 source/name/relPath`
+- `skills/obsidian-inbox/scripts/note.mjs - 修改, 归档区拦截移到 assertDirReady 之前（修顺序 bug）`
+- `skills/obsidian-inbox/SKILL.md - 修改, 7 处分层描述`
+
+**变更摘要**：
+平铺 sessions/ 在多 agent 后混杂，改按来源分层 sessions/<agent>/（仅 agent 一层，不按领域再分，索引留根）。写入侧 writeNote 与 dry-run 路径加 <agent> 段（s._agent，--dir 显式指定时跳过）；23 篇旧笔记迁入 sessions/dsh/。索引侧是关键：原 readdirSync 只读一层，分层后会漏读子目录，新增 walkMd 递归收集；entries 加 source（子目录名优先、根下回退 frontmatter）、name（wikilink 纯笔记名跨子目录不冲突）、relPath。wikilink 保持 [[笔记名]] 不带路径所以移动不断链。顺带修一个真 bug：归档区拦截在 assertDirReady 之后，--dir sessions/<agent> 会因目录不存在报新建分类而非归档区禁写，把检查移到前面后 sessions 全系列（含不存在的子目录）都正确拦截。验证：selftest 17/17、reindex 递归 count=23、wikilink 0 子目录前缀、dry-run 写入 sessions/dsh/、四个 --dir 全拦。
+
+**遇到的问题**：
+- readdirSync 只读一层是分层的隐形坑——改目录结构时不改扫描逻辑，索引会静默漏读子目录（count 变 0 不报错），必须递归 + 断言 count。归档区拦截与 assertDirReady 的顺序是既有 bug、分层后暴露：目录存在性检查先跑会把'这是禁写区'误导成'目录不存在需 --mkdir'，应先判禁写再判存在。show --path 需带 .md 后缀（历史如此，测试时漏带误以为是分层 bug）。wikilink 用纯笔记名是当初的正确设计，分层移动零断链——若当初用了 [[sessions/名]] 带路径形式，这次改名会全断。
+
 ## Session #2 - 2026-09-28 11:04
 
 **需求**：
