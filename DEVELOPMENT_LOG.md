@@ -117,6 +117,22 @@ obsidian-inbox, skill 开发, 知识库, 跨平台
 **遇到的问题**：
 - amend 会留下不可达对象且可能携带被替换前的内容（本次就抓到一个）——每次改写或 amend 后必须 gc --prune=now；技能安装目录若用复制方式而非软链，会与仓库失步：本次四个副本全部过期，其中两个 SKILL.md 的本地改写从未入库；审计脚本的两个坑——git diff 失败时 stderr 不进空判断会假通过、matchAll 要求正则带 g；外部词表交叉核对要区分公开开源项目名与真正的内部标识（避免误报）；用旧版脚本写的三条早期续记缺变更摘要两节（脚本已在 5a9680b 修复，本次起生效）
 
+### （续）续记：多 agent 归档改造（qoder/claude/codex 接入）
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/adapters - 新增, contract/dsh/qoder/claude/codex/index 六个模块（统一 session 契约 + 四家格式映射）`
+- `skills/obsidian-inbox/scripts/sediment.mjs - 修改, collectSessions 改分发 adapter、transcript 兜底走 adapter、source/tags 用 _agent`
+- `skills/obsidian-inbox/scripts/lib.mjs - 修改, loadConfig 加 agentAdapter 字段`
+- `skills/obsidian-inbox/config.example.json - 修改, 加 agentAdapter`
+- `skills/obsidian-inbox/scripts/selftest.mjs - 修改, 加 P4 adapter 契约测试、check 支持 async`
+- `skills/obsidian-inbox/SKILL.md - 修改, 多 agent 归档小节与支持矩阵`
+
+**变更摘要**：
+把归档通道从硬编码 DSH 抽成 adapter 层。核心是 adapters/contract.mjs 定义的统一 session 对象（id/cwd/turns[{turn,prompt,response}]），collectSessions 按 cfg.agentAdapter 分发，每个 adapter 把各家会话格式映射进来，归档的查重/精炼/索引逻辑零改动。新增 dsh（抽出原逻辑作回归基准）、qoder、claude、codex 四个 adapter，全部在本机真实数据上验证：qoder 14 会话/125 轮、codex 6/19、dsh 84/337 不变、claude 180（本机 projects 为空，走 history.jsonl 回退只有 prompt 无回复，归档判 trivial 跳过符合预期，已加一次性提示说明原因）。多 agent 支持逗号分隔合并（dsh+qoder+codex 实测 104 = 84+14+6），单 adapter 失败不阻断。contract 层统一 textOf（跳过 thinking/tool_use）与 isNoisePrompt（slash-command、<recommended_plugins> 等噪音不产生空轮次）。归档 frontmatter 的 source/tags 改为 agent-aware（source: qoder、qoder/归档），domain 仍由 cwd 路由。实测完整链路：qoder 会话 → 17KB 笔记、26 轮、domain 正确路由到 opensource/forks。cursor（SQLite 依赖）与 workbuddy（未定位到对话流）暂未实现，见支持矩阵。selftest 15→17（P4 契约测试）。
+
+**遇到的问题**：
+- 本机 ~/.claude/projects 下会话 jsonl 全为空（会话可能在别处或已清理），Claude adapter 只能走 history.jsonl 回退——数据只有 prompt 没有 assistant 回复，归档必然判 trivial；已加一次性 stderr 提示避免用户困惑地看到 scanned=180 却 0 创建。check() 原本是同步的，async 测试的返回值会被 string 成 [object Promise] 且失败变成未处理拒绝，改为收集 Promise 统一 await（注入错误验证能被抓住）。Qoder/Codex 首条 user 常带 <command-message>/<recommended_plugins> 等注入，不当滤会成为空轮次或污染标题。未来接入 cursor 需引入 SQLite 依赖（与零依赖原则冲突，需权衡用 sqlite3 命令行而非 node 模块）。
+
 ## Session #2 - 2026-09-28 11:04
 
 **需求**：
