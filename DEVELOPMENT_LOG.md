@@ -133,6 +133,20 @@ obsidian-inbox, skill 开发, 知识库, 跨平台
 **遇到的问题**：
 - 本机 ~/.claude/projects 下会话 jsonl 全为空（会话可能在别处或已清理），Claude adapter 只能走 history.jsonl 回退——数据只有 prompt 没有 assistant 回复，归档必然判 trivial；已加一次性 stderr 提示避免用户困惑地看到 scanned=180 却 0 创建。check() 原本是同步的，async 测试的返回值会被 string 成 [object Promise] 且失败变成未处理拒绝，改为收集 Promise 统一 await（注入错误验证能被抓住）。Qoder/Codex 首条 user 常带 <command-message>/<recommended_plugins> 等注入，不当滤会成为空轮次或污染标题。未来接入 cursor 需引入 SQLite 依赖（与零依赖原则冲突，需权衡用 sqlite3 命令行而非 node 模块）。
 
+### （续）续记：挖清 workbuddy 存储并接入 adapter
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/adapters/workbuddy.mjs - 新增, 读 ~/.workbuddy/workbuddy.db 的 sessions 表（Python sqlite3 只读，零 npm 依赖）`
+- `skills/obsidian-inbox/scripts/adapters/index.mjs - 修改, 登记 workbuddy`
+- `skills/obsidian-inbox/scripts/selftest.mjs - 修改, P4-1 断言 5 个 adapter 全执行、L2-3 加 workbuddy.mjs`
+- `skills/obsidian-inbox/SKILL.md - 修改, 支持矩阵 workbuddy 状态`
+
+**变更摘要**：
+把 workbuddy 的存储挖到底：唯一权威数据源是 ~/.workbuddy/workbuddy.db（Drizzle/SQLite）的 sessions 表，30 列字段齐全（cwd/title/model/created_at/last_activity_at/status）。排除了其他可能：config 里 legacy_history_migration 指的 codebuddy-sessions.vscdb 不存在、expert-history.json 是空对象、无独立消息表（sessions 表无 message/turn 列）、logs/startup 的 jsonl 是启动日志（[timestamp] {"_type":"mark"} 非对话）、Local Storage/leveldb 只命中渲染层 sessionId、其余 db（edge-sync/threat-database）无关。adapter 实现保持零 npm 依赖：spawnSync 调 Python 标准库 sqlite3 只读打开（与 db-sync.sh 内联 Python 同模式，python3→python→py -3 探测，三平台自带），过滤 deleted_at IS NULL AND is_playground=0。消息部分诚实处理：sessions 表无消息列、本机无消息表 → turns 为空，归档端 substanceOf=0 判 trivial 跳过（不报错），消息一旦落地自动接入。验证：按真实 schema 造 fixture（3 行含软删除+沙盒）→ 正确返回 1 条、cwd/title/model/lastActivityAt 全部提取；本机真实表 0 行 → 返回 0 优雅降级。五 adapter 合计 284 会话。
+
+**遇到的问题**：
+- 本机 workbuddy sessions 表 0 行（还没建过会话），无法用真实数据端到端验证，只能用按真实 schema 造的 fixture 验证解析逻辑——这是本次最大的局限，adapter 要等真有会话才能实测全链路。消息在云端/未迁移（sessions 表 30 列里无 message 列），adapter 当前只取元数据，turns 恒为空，意味着即使会话有数据、归档也会判 trivial——需要等 workbuddy 落地消息表才能真正归档。没引入 better-sqlite3 之类 node sqlite 模块（会破坏零依赖原则），改用 Python 标准库 sqlite3（系统自带，与 db-sync 既有模式一致）。已核实 codebuddy-sessions.vscdb 等 legacy 路径都不存在，避免了在错误位置找数据。
+
 ## Session #2 - 2026-09-28 11:04
 
 **需求**：
