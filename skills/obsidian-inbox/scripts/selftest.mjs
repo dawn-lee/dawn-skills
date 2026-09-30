@@ -21,7 +21,8 @@
  * 退出码：0 全部通过 / 1 有失败项
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -226,6 +227,48 @@ check('P4-2', 'agentAdapter 多值与未知值处理（逗号分隔 / 未登记�
   let threw2 = false;
   try { resolveAgents({ agentAdapter: 'dsh,nope' }); } catch { threw2 = true; }
   assert(threw2, '混合未知值应报错');
+});
+
+// ------------------------------------------------------------ P5 写通道安全（临时 vault）
+
+check('P5-1', 'distill 拒绝不存在的目标且不写标记（防把归档误标为已提炼）', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'oi-distill-'));
+  try {
+    const vault = join(tmp, 'vault');
+    mkdirSync(join(vault, 'sessions', 'dsh'), { recursive: true });
+    mkdirSync(join(vault, 'dawn'), { recursive: true });
+    const noteRel = 'sessions/dsh/probe.md';
+    const noteAbs = join(vault, noteRel);
+    const original = '---\ntype: session\nsource: dsh\ndomain: dawn\ndate: 2026-01-01\n---\n\n# 探针\n';
+    writeFileSync(noteAbs, original, 'utf8');
+    const cfgPath = join(tmp, 'config.json');
+    writeFileSync(cfgPath, JSON.stringify({ vault, archiveDir: 'sessions', domainRoots: ['dawn'], defaultDir: 'dawn' }), 'utf8');
+    const env = { ...process.env, OBSIDIAN_INBOX_CONFIG: cfgPath, OBSIDIAN_INBOX_STATE: join(tmp, 'state') };
+
+    // ① 目标不存在 → 必须失败
+    const r1 = spawnSync(process.execPath, [join(SKILL_DIR, 'scripts', 'note.mjs'), 'distill',
+      '--path', noteRel, '--into', '[[绝对不存在的目标XYZ]]'], { encoding: 'utf8', env });
+    assert(r1.status !== 0, `目标不存在时 distill 应失败，实际退出码 ${r1.status}`);
+    const after = readFileSync(noteAbs, 'utf8');
+    assert(!/distilled_into/.test(after), '目标不存在却写入了 distilled_into（会把归档误标为已提炼）');
+
+    // ② 目标是归档区笔记 → 必须失败（归档是原始素材，不能当提炼目标）
+    const r2 = spawnSync(process.execPath, [join(SKILL_DIR, 'scripts', 'note.mjs'), 'distill',
+      '--path', noteRel, '--into', '[[probe]]'], { encoding: 'utf8', env });
+    assert(r2.status !== 0, `提炼目标是归档笔记时应失败，实际退出码 ${r2.status}`);
+    assert(!/distilled_into/.test(readFileSync(noteAbs, 'utf8')), '指向归档笔记却写了标记');
+
+    // ③ 目标存在且合法 → 必须成功并写标记
+    writeFileSync(join(vault, 'dawn', '真目标.md'), '---\ntype: note\n---\n\n# 真目标\n', 'utf8');
+    const r3 = spawnSync(process.execPath, [join(SKILL_DIR, 'scripts', 'note.mjs'), 'distill',
+      '--path', noteRel, '--into', '[[真目标]]'], { encoding: 'utf8', env });
+    assert(r3.status === 0, `合法 distill 应成功，实际退出码 ${r3.status}：${String(r3.stderr || '').slice(0, 200)}`);
+    const final = readFileSync(noteAbs, 'utf8');
+    assert(/distilled_into:\s*"?\[\[真目标\]\]/.test(final), `未写入正确标记：${final.slice(0, 200)}`);
+    return '不存在/归档目标均被拒，合法目标写标记成功';
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 // ------------------------------------------------------------ L1 分发红线

@@ -218,10 +218,21 @@ function cmdDistill() {
   let calibrated = null;
   let res;
   try {
-    // domain 校准：归档 domain 应等于提炼目标所在目录（cwd 路由出的 domain 可能与知识落点不同）
     const intoName = args.into.replace(/^\[\[/, '').replace(/\]\]$/, '').split('|')[0].trim();
     const hit = listNoteIndex(cfg, 100000).find((p) => basename(p, '.md') === intoName);
-    if (hit && !normalizeRel(hit).startsWith(`${cfg.archiveDir}/`)) {
+    // 目标必须已存在：distill 的语义是「标记内容已提炼到某篇主题笔记」。
+    // 目标不存在还写标记，会把归档错误地从「待提炼」队列移除，并留下悬空的
+    // distilled_into 引用（踩过：测试传了不存在的目标名，笔记被误标为已提炼）。
+    if (!hit) {
+      fail(4, `提炼目标笔记不存在：[[${intoName}]]。distill 只标记「已提炼到已有笔记」；`
+        + `若该内容值得独立成篇，先用 note.mjs new 建出目标主题笔记再 distill`);
+    }
+    if (normalizeRel(hit).startsWith(`${cfg.archiveDir}/`)) {
+      fail(2, `提炼目标不能是归档区笔记（[[${intoName}]] 位于 ${cfg.archiveDir}/ 下）；`
+        + `归档是原始素材，主题笔记应放领域目录`);
+    }
+    // domain 校准：归档 domain 应等于提炼目标所在目录（cwd 路由出的 domain 可能与知识落点不同）
+    {
       const targetDir = dirname(hit);
       const raw = readFileSync(absPath, 'utf8');
       const { fields } = parseFrontmatter(raw);
