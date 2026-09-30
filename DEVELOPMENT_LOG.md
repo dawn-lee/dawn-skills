@@ -170,7 +170,7 @@ obsidian-inbox, skill 开发, 知识库, 跨平台
 - `skills/obsidian-inbox/scripts/sediment.mjs - 修改, buildArchiveIndex 提取 source、表头/行加来源列、加按来源分布统计、索引标题去 DSH`
 
 **变更摘要**：
-sessions/ 汇聚多 agent 后，索引表缺「来源」列看不出每条来自哪个 harness。buildArchiveIndex 的 entries 提取 frontmatter source（缺失回退 dsh 兼容旧笔记），表头在日期后加来源列、每行插入 e.source，统计区加「按来源分布」行与领域分布并列，索引标题 DSH→去掉。验证两步：--reindex 对现有 23 篇得到 6 列一致表、来源全 dsh；再用 codex adapter 隔离 state 归档一篇 → 索引显示 dsh 23、codex 1，该行日期/来源/领域/会话 id 全正确（codex 的 domain=cic/arch 由 cwd 路由、source=codex）。期间一个误判：ls -t 首篇是索引.md 而非 codex 笔记，导致一度以为 source 被标签泛化误伤，精确定位后确认代码 source: s._agent || 'dsh' 正确。测试笔记已清理、reindex 回到 23 篇。
+sessions/ 汇聚多 agent 后，索引表缺「来源」列看不出每条来自哪个 harness。buildArchiveIndex 的 entries 提取 frontmatter source（缺失回退 dsh 兼容旧笔记），表头在日期后加来源列、每行插入 e.source，统计区加「按来源分布」行与领域分布并列，索引标题 DSH→去掉。验证两步：--reindex 对现有 23 篇得到 6 列一致表、来源全 dsh；再用 codex adapter 隔离 state 归档一篇 → 索引显示 dsh 23、codex 1，该行日期/来源/领域/会话 id 全正确（codex 的 domain 由 cwd 路由、source=codex）。期间一个误判：ls -t 首篇是索引.md 而非 codex 笔记，导致一度以为 source 被标签泛化误伤，精确定位后确认代码 source: s._agent || 'dsh' 正确。测试笔记已清理、reindex 回到 23 篇。
 
 **遇到的问题**：
 - 标签泛化时要特别小心别误伤 source：tags 从 dsh/ 归档 改 archive/ 归档，但 source 必须保留 agent（qoder/dsh/codex）——两者都带前缀斜杠，正则容易一起替换。验证多 agent 列显示时，归档会话会同时重建索引使索引.md 时间戳最新，ls -t 取首篇会拿到索引而非目标笔记，需排除索引文件。列数校验用 awk -F'|' '{NF-1}' 会把行首尾空段多数一个，正确做法是 split 后取 [1:-1]。
