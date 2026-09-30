@@ -2,7 +2,7 @@
   "_note": "obsidian-inbox 配置模板。不要直接改这个文件——它不生效。运行 `node scripts/init.mjs` 会探测知识库与项目目录并生成本机的 config.json（已 gitignore）。也可复制本文件为 config.json 后手改。所有机器相关路径请写 ${HOME} 占位，不要写死家目录。",
   "_fieldHelp": {
     "vault": "Obsidian 知识库根目录（含 .obsidian/ 的目录）",
-    "archiveDir": "会话归档区（知识库顶层），由 sediment 维护",
+    "archiveDir": "会话归档区（知识库顶层，跨所有 agent），由 sediment 维护；默认 sessions",
     "domainRoots": "容器目录：只能放子目录、不能直接放笔记",
     "domainNotes": "目录语义说明；键是知识库相对路径，会显示在 route 输出与报错提示里",
     "catalogSources": "容器的既定分类来源目录；其子目录名即合法分类（动态读取，新增自动生效）",
@@ -17,7 +17,7 @@
     "agentAdapter": "会话数据源：dsh（默认）/ qoder / claude / codex，可逗号分隔多个（如 \"dsh,qoder\"）。Cursor、workbuddy 暂未实现，见 SKILL.md"
   },
   "vault": "${HOME}/Documents/Obsidian Vault",
-  "archiveDir": "dsh-sessions",
+  "archiveDir": "sessions",
   "agentAdapter": "dsh",
   "minAssistantChars": 300,
   "digestBudgetChars": 24000,

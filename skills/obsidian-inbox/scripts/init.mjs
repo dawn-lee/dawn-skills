@@ -107,7 +107,7 @@ function detectContainers(projectsRoot) {
 function buildConfig({ preset, vaultRel, projectsRoot, containers, soft, defaultDir }) {
   const base = {
     vault: vaultRel,
-    archiveDir: 'dsh-sessions',
+    archiveDir: 'sessions',
     minAssistantChars: 300,
     digestBudgetChars: 24000,
     searchExclude: ['.obsidian', '.trash', '.smart-env', '.git', 'copilot/copilot-conversations'],

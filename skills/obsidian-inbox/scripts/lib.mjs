@@ -133,7 +133,7 @@ export function loadConfig() {
   }
   cfg.vault = resolve(expandVars(cfg.vault));
   cfg.defaultDir = normalizeRel(cfg.defaultDir ?? '');
-  cfg.archiveDir = cfg.archiveDir ?? 'dsh-sessions';
+  cfg.archiveDir = cfg.archiveDir ?? 'sessions';
   cfg.routes = (Array.isArray(raw.routes) ? raw.routes : [])
     .filter((r) => r && typeof r.pattern === 'string')
     .map((r) => ({

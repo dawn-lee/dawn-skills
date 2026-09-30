@@ -156,7 +156,7 @@ node scripts/note.mjs route
 | `work/<域>` | 现有域：`arch`、`service`、`ops`、`work-skills`、`utils`、`workspace`；域内可直接放笔记，可再按项目细分 |
 | `opensource/` | **第三方开源项目容器**：既不属于工作也不属于个人；第二级**必须是仓库名**，取自 `~/Documents/projects/opensource/` 的子目录 |
 | `opensource/<仓库>` | 现有：`forks`、`mcp`、`skills`（`agentscope-java` 例外，见下）；仓库内可直接放笔记 |
-| `dsh-sessions/` | **顶层归档区**（跨领域原始素材，sediment 专用，不属于任何容器） |
+| `sessions/` | **顶层归档区**（跨领域原始素材，sediment 专用，不属于任何容器） |
 
 判定顺序：先在已有目录里找匹配（`pop` 管系统、`docker` 管容器、`dawn/<项目>` 管个人项目、`work/<域>` 管业务域、`work/arch/<子项目>` 管 arch 下的具体项目、`opensource/<仓库>` 管开源项目、`知识库` 管通用工具知识）→ 都不匹配才**按主题新建**（如 `dawn/性能调优`）→ 实在拿不准就问用户，**不要往容器根写**。
 
@@ -177,7 +177,7 @@ node scripts/note.mjs route
 
 **代码会拦截**：`note.mjs new` 落点为容器根（`dawn`/`work`/`opensource`）时报错并列出可选目录；`work/<不存在的域>`、`work/arch/<不存在的子项目>`、`opensource/<不存在的仓库>`、`dawn/<既不在 `projects/dawn` 也未登记在 `domainNotes` 的目录>` 同样报错并列出真实清单（清单实时读 `projects/` 下的目录，新增自动生效；`dawn` 的主题目录 `pop`/`docker`/`知识库` 以 `domainNotes` 登记为准，与项目清单并存校验）。`route` 命令会打印目录含义与 `⚠` 提示。
 
-**归档不走领域目录**：会话归档统一落在**顶层** `dsh-sessions/`，避免容器被原始素材污染；会话归属（`dawn/pop`、`work/service`、`opensource/mcp`…）记在归档笔记 frontmatter 的 `domain` 字段里，可用它筛选/建 Dataview 视图。
+**归档不走领域目录**：会话归档统一落在**顶层** `sessions/`，避免容器被原始素材污染；会话归属（`dawn/pop`、`work/service`、`opensource/mcp`…）记在归档笔记 frontmatter 的 `domain` 字段里，可用它筛选/建 Dataview 视图。
 
 ### 拿不准就问，不许乱放
 
@@ -211,13 +211,13 @@ ask_user_question("这条笔记放哪？",
 | `work/<不存在的域>`、`work/arch/<不存在的子项目>`、`opensource/<不存在的仓库>` | 报错 + 列出真实清单（`strictCatalog` 容器：**必须对应 `~/Documents/projects/` 下的真实目录**） |
 | 库外绝对路径 | 报错（`路径不在知识库内`） |
 | **不存在的分类目录** | 报错：*"写入等于新建一个分类…确认后再加 `--mkdir`；拿不准就先问用户"* |
-| `dsh-sessions/`（归档区） | 报错：归档区由 sediment 维护，不放手工笔记（补归档用 `node scripts/sediment.mjs --session <id>`） |
+| `sessions/`（归档区） | 报错：归档区由 sediment 维护，不放手工笔记（补归档用 `node scripts/sediment.mjs --session <id>`） |
 
 `--mkdir` 是"我已确认这个分类"的显式声明——**只有用户点头之后才用它**。例外：容器的**既定分类**（`work/<业务域>`、`work/arch/<子项目>`、`dawn/<项目>`、`opensource/<仓库>`，清单来自 `catalogSources`）首次写入会自动建目录，不必确认。
 
 > **严格 vs 软校验**（`strictCatalog`）：`work`、`opensource` 是严格容器——子目录必须对应真实项目目录（写错名直接报错，不给 `--mkdir` 逃生口）；`dawn` 是软校验——真实项目目录（`dawn/dawn-skills`）与已登记主题目录（`dawn/pop`…）自动放行，**新主题目录**（如 `dawn/性能调优`）走 `--mkdir` + 用户确认。
 
-归档是无人值守的，问不了人：当域只能落到容器根（`dawn` / `work`）时，笔记会写 `unclassified: true` 并打上 `dsh/待归类` 标签。事后用标签视图或 `note.mjs search --query 待归类` 捞出来，确认域之后改掉 `domain`、删掉标签即可。
+归档是无人值守的，问不了人：当域只能落到容器根（`dawn` / `work`）时，笔记会写 `unclassified: true` 并打上 `archive/待归类` 标签。事后用标签视图或 `note.mjs search --query 待归类` 捞出来，确认域之后改掉 `domain`、删掉标签即可。
 
 ### 笔记格式
 
@@ -272,8 +272,8 @@ ask_user_question("这条笔记放哪？",
 #   "agentAdapter": "dsh,qoder,claude,codex"
 ```
 
-- **归档产物**统一落 `dsh-sessions/`，frontmatter 里 `source` 与 `tags` 标明来源 agent
-  （如 `source: qoder`、`qoder/归档`），`domain` 仍由会话的 `cwd` 路由判定；
+- **归档产物**统一落 `sessions/`，frontmatter 里 `source` 与 `tags` 标明来源 agent
+  （`source` = 来源 agent 如 `qoder`/`dsh`/`codex`，`tags` = 统一的 `archive/归档`，`domain` 仍由会话的 `cwd` 路由判定）；
 - 各家目录可用环境变量覆盖：`DSH_HOME` / `QODER_HOME` / `CLAUDE_HOME` / `CODEX_HOME`；
 - **未登记的 adapter 会报错**（列出可用项）——接入新 agent 只需在 `adapters/` 加一个文件
   + 在 `adapters/index.mjs` 登记，实现 `listSessions(cfg, win, args)` 返回统一对象即可；
@@ -286,9 +286,9 @@ ask_user_question("这条笔记放哪？",
 1. 按 `cfg.agentAdapter`（默认 `dsh`）从对应 agent 的会话存储取时间窗内的会话（见下「多 agent 归档」）；
 2. 拼摘要：优先用 `turnOutline`（每轮问答预览）；**老会话的投影可能为空或预览截断得极小**，此时自动回退解压 `~/.dsh/sessions/<slug>/<sid>/session.jsonl.zstd`，抽 `user/message` + `assistant/message` 的 text（跳过 reasoning）重建摘要，避免老会话被误判成"没内容"而漏归档。**代码块必须整段保留**：transcript 摘要里含代码围栏的段落不按字数截断（只裁围栏外的散文）；turnOutline 摘要若围栏不成对（=在代码中间被切），自动回退读原始 transcript；LLM 提示词明确要求代码/命令/SQL **逐字完整复制**，禁止概括与截断（踩过坑：SQL 曾因截断从知识库丢失）。
 3. 拼成摘要喂给 `dsh headless` 精炼（挂 [patch/headless-notes-only.yml](patch/headless-notes-only.yml)，**禁掉全部工具**，防止会话里夹带的外部内容触发注入）；
-4. 有价值就写成 `dsh-sessions/YYYY-MM-DD <标题>.md`（知识库顶层归档区），领域记在 frontmatter 的 `domain`（如 `work/arch/app`）；模型判断没价值则输出 `SKIP` 跳过；
+4. 有价值就写成 `sessions/YYYY-MM-DD <标题>.md`（知识库顶层归档区），领域记在 frontmatter 的 `domain`（如 `work/arch/app`）；模型判断没价值则输出 `SKIP` 跳过；
 5. 状态写在 `archived.json`（Linux/macOS `~/.local/state/obsidian-inbox/`，Windows `%LOCALAPPDATA%\obsidian-inbox\`）（按会话记录已归档轮次，同一会话后续新增的轮次会**追加补记**而不是重复建档）；归档内容有误需要重做时用 `--force`，它是**整篇覆盖重写**（不是追加补记），可纠正内容退化/空壳的归档——重写**保留**已有的 `distilled_*` 提炼标记与 H1 标题；每次真实运行会在 `sediment.log` 留一条 `[run] pid=… cwd=… argv=… window=…` 留痕（`--reindex` 不留）。
-6. **每次归档后自动重建入口页** `dsh-sessions/索引.md`（日期 / 领域 / 链接 / 会话 id 一览表 + 领域分布统计），`--reindex` 可单独重建。
+6. **每次归档后自动重建入口页** `sessions/索引.md`（日期 / 领域 / 链接 / 会话 id 一览表 + 领域分布统计），`--reindex` 可单独重建。
 
 > ⚠ `sediment.mjs` 有 isMain 守卫，`import()` 只加载定义、**不执行**主流程（此前误 import 触发过全量归档，已修）。
 > ⚠ 有**互斥锁** `状态目录/sediment.lock`（路径同上）：定时器/手动/平行会话共用，防并发读写账本；等锁最多 60s，拿不到退出 1；持有者超 30 分钟视为已死自动接管。`distill` 拿不到锁会立即失败（不排队）。
@@ -302,7 +302,7 @@ node scripts/sediment.mjs --session session-xxx  # 只处理某个会话
 node scripts/sediment.mjs --no-llm             # 不调模型，直接落原始摘要
 node scripts/sediment.mjs --force              # 忽略 state 重新归档
 node scripts/sediment.mjs --min-chars 150      # 放宽"有效内容量"门槛，救回短而密的会话
-node scripts/sediment.mjs --reindex            # 只重建 dsh-sessions/索引.md，不扫会话
+node scripts/sediment.mjs --reindex            # 只重建 sessions/索引.md，不扫会话
 ```
 
 > 上述命令**三平台通用**（node 已在 PATH 时最省事）。包装入口接受同样的参数：
@@ -313,7 +313,7 @@ node scripts/sediment.mjs --reindex            # 只重建 dsh-sessions/索引.m
 
 日志：`状态目录/sediment.log`（`OBSIDIAN_INBOX_STATE` 或平台默认目录，见文首）；调度侧自检用 `node scripts/install.mjs --status`（linux 也可 `systemctl --user status dsh-sediment` / `journalctl --user -u dsh-sediment`，macOS 看 `~/Library/LaunchAgents` 与 `sediment.err.log`）。
 
-归档笔记的定位是**原始素材**，`dsh-sessions/` 不是索引也不是成品区：真正成体系的知识，应该在读过之后用写通道整理成主题笔记（可以顺手把归档笔记里的内容提炼过去，再决定要不要删掉原始归档）。要找归档，先看 `dsh-sessions/索引.md`，或搜标签 `#dsh/归档`。
+归档笔记的定位是**原始素材**，`sessions/` 不是索引也不是成品区：真正成体系的知识，应该在读过之后用写通道整理成主题笔记（可以顺手把归档笔记里的内容提炼过去，再决定要不要删掉原始归档）。要找归档，先看 `sessions/索引.md`，或搜标签 `#archive/归档`。
 
 ---
 
@@ -321,7 +321,7 @@ node scripts/sediment.mjs --reindex            # 只重建 dsh-sessions/索引.m
 
 归档只进不出会越堆越多，所以有这一步。**它必须有人参与**——判断"值不值得成文 + 放哪个域"需要上下文，落位还要你确认，无法无人值守。
 
-**触发**：用户说"提炼一下归档"；或看到 `dsh-sessions/索引.md` 里的 `⏳ 待提炼` 计数不为 0。
+**触发**：用户说"提炼一下归档"；或看到 `sessions/索引.md` 里的 `⏳ 待提炼` 计数不为 0。
 
 **流程**（每篇归档三种归宿，别一律新建笔记）：
 
@@ -334,7 +334,7 @@ node scripts/sediment.mjs --reindex            # 只重建 dsh-sessions/索引.m
 
 ```bash
 node scripts/note.mjs distill \
-  --path "dsh-sessions/2026-09-20 xxx.md" \
+  --path "sessions/2026-09-20 xxx.md" \
   --into "[[AgentScope 本地部署与接入排障]]" \
   --note "已提炼为专题笔记"        # 或「内容已被现有笔记完整覆盖，无需追加」
 ```
@@ -343,7 +343,7 @@ node scripts/note.mjs distill \
 
 **标记时自动校准 domain**：归档的 `domain` 应等于提炼目标笔记所在的目录——cwd 路由出的 domain 可能与知识落点不同（如 app 里聊 DSH 工具，知识落 `dawn/知识库`）；不一致时命令会改正并输出 `domain 校准：A → B`，索引的领域分布随之正确。`--force` 重写归档也会保留已校准的 domain（与 distilled 标记、H1 一起保留）。
 
-> 提炼完的归档可以删（`dsh-sessions/` 只留原料）。删之前确认目标笔记已经承接住内容——**删归档不会删主题笔记**。
+> 提炼完的归档可以删（`sessions/` 只留原料）。删之前确认目标笔记已经承接住内容——**删归档不会删主题笔记**。
 
 ### 回补归档时丢失的代码块（`recover`）
 

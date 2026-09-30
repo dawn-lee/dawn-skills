@@ -9,7 +9,7 @@
  *   node scripts/note.mjs search --query "关键词" [--limit 10] [--json]
  *   node scripts/note.mjs show   --path "dawn/x.md" [--json]
  *   node scripts/note.mjs route  --cwd /abs/path [--json]
- *   node scripts/note.mjs distill --path "dsh-sessions/x.md" --into "[[主题笔记]]" [--note 说明] [--json]
+ *   node scripts/note.mjs distill --path "sessions/x.md" --into "[[主题笔记]]" [--note 说明] [--json]
  *   node scripts/note.mjs recover --session <会话id> --into "[[主题笔记]]" [--min-len 300] [--limit 20] [--dry-run] [--json]
  *
  * 退出码：0 成功 / 2 用法错误 / 3 目标已存在（需 --append 或 --force） / 4 未找到
@@ -32,7 +32,7 @@ const USAGE = `用法：
   note.mjs search --query Q [--limit N] [--json]
   note.mjs show --path P [--json]
   note.mjs route --cwd P [--json]
-  note.mjs distill --path "dsh-sessions/归档.md" --into "[[主题笔记]]" [--note 说明] [--json]
+  note.mjs distill --path "sessions/归档.md" --into "[[主题笔记]]" [--note 说明] [--json]
   note.mjs recover --session <会话id> --into "[[主题笔记]]" [--min-len 300] [--limit 20] [--dry-run] [--json]
 
 首次使用 / 换电脑：

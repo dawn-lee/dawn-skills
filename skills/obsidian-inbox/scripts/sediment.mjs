@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * sediment.mjs —— DSH 会话 → Obsidian 知识沉淀（每日兜底归档）。
+ * sediment.mjs —— agent 会话 → Obsidian 知识沉淀（每日兜底归档）。
  *
  * 流程：扫描 ~/.dsh/storages/session_projcache 找到时间窗内有活动的会话
  *      → 用 turnOutline（含每轮 prompt/response）拼摘要，不调模型也能跑
  *      → 调 `dsh headless`（挂 no-tools 补丁）精炼成结构化笔记
- *      → 写入 vault 对应领域目录的 dsh-sessions/ 下；同一会话有新增轮次时追加补记。
+ *      → 写入 vault 归档区（archiveDir，默认 sessions/）下；同一会话有新增轮次时追加补记。
  *
  * 用法：
  *   node scripts/sediment.mjs [--date 2026-09-28] [--since-hours 26] [--limit N]
@@ -303,7 +303,7 @@ function rawNote(s, digest) {
   return {
     skip: false,
     title: s.title || `会话归档 ${fmtTime(s.lastPromptAt, false)}`,
-    tags: [`${s._agent || 'dsh'}/归档`],
+    tags: ['archive/归档'],
     body: `## 会话摘要（原始）\n\n${digest}`,
   };
 }
@@ -345,7 +345,7 @@ function writeNote(cfg, s, note, prev, args) {
     model: s.model || undefined,
     date: dateStr,
     updated: fmtTime(Date.now()),
-    tags: [`${s._agent || 'dsh'}/归档`, ...(unclassified ? [`${s._agent || 'dsh'}/待归类`] : []), ...note.tags.filter((t) => !/\/(归档|待归类)$/.test(t))],
+    tags: ['archive/归档', ...(unclassified ? ['archive/待归类'] : []), ...note.tags.filter((t) => !/\/(归档|待归类)$/.test(t))],
   });
 
   if (exists && !args.force) {
@@ -431,7 +431,7 @@ function buildArchiveIndex(cfg) {
     : '知识库的主题目录';
 
   const lines = [
-    buildFrontmatter({ type: 'index', source: 'dsh', updated: fmtTime(Date.now()), tags: ['dsh/归档', '索引'] }),
+    buildFrontmatter({ type: 'index', source: 'archive', updated: fmtTime(Date.now()), tags: ['archive/归档', '索引'] }),
     '',
     '# DSH 会话归档索引',
     '',
