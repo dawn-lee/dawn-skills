@@ -217,6 +217,18 @@ sessions/ 汇聚多 agent 后，索引表缺「来源」列看不出每条来自
 **遇到的问题**：
 - 断链检查器有两处误报要记：①只索引 .md 当解析目标，把 ![[图片.png]] 的附件嵌入判成断链——实际图片在知识库的 attachments 目录里好好的，Obsidian 按 basename 全库解析；②用 Path.stem 当目标名会剥掉扩展名，而图片链接带扩展名，必须同时收 f.stem 与 f.name。差点据此误报'两个图片断链'并去'修'一个本来没问题的引用。改名类操作的成本：一个笔记改名牵动 3 篇归档的 distilled_into、2 处索引、4 篇主题笔记的 wikilink，共 11 处，必须全库同步并复查悬空引用——这也是当初 wikilink 用 [[纯笔记名]] 而非带路径的好处（改路径不断链，但改名仍要同步）。.smart-env 里 6252 处旧路径是插件索引缓存，会自动重建，手工删反而丢嵌入向量，属不处理项。
 
+### （续）续记：实测归档 codex 会话（真实 LLM 链路）+ codex 模型名提取修复
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/adapters/codex.mjs - 修改, 从 turn_context.payload.model 取模型名（session_meta 只有 model_provider）`
+- `知识库 sessions/codex/ - 新增 1 篇真实归档笔记（首个非 dsh 来源的归档）`
+
+**变更摘要**：
+按用户要求实测归档 codex 会话，走真实 LLM 精炼链路（非 --no-llm）：用临时配置（仅把 agentAdapter 改成 codex，其余字段与真实配置逐字一致）+ 真实账本，定点归档 rollout-2026-09-10T16-23-12 会话。结果：6 轮 / 10644 字摘要 → 精炼成 121 行笔记，落 sessions/codex/，领域按 cwd 路由到公司域 arch，索引显示「按来源分布：dsh 23、codex 1」，账本正确记录分层后的 notePath。内容质量核对：结论节抓到真实根因（前端依赖锁文件里 286 个内网源地址固化、npm 11 只替换官方域名不替换内网域名、Go 版本要求与 apt 源不匹配、某端口被容器占用并给出仓库提交号、总路由漏注册函数导致接口恒 404），命令逐字保留（npm_config_replace_registry_host 等）。过程中发现并修一个瑕疵：codex 的 session_meta 只有 model_provider=custom，模型名在 type=turn_context 的 payload.model（实测 gpt-5.6-sol），adapter 补上后 6 个 codex 会话模型全部取到；对已归档那篇跑 --force 原地重写，摘要行显示真实模型且笔记数不变（验证了改名后按 id 找回、force 不重复建档的链路）。自检 19/19。
+
+**遇到的问题**：
+- adapter 抽取字段要对着真实数据逐类行核实：codex rollout 有 session_meta / event_msg / response_item / turn_context 四类行，模型名不在最像的 session_meta 里而在 turn_context，只看 session_meta 就会一直显示未知模型。真实 LLM 归档的价值在于它能暴露 --no-llm 看不到的环节（精炼质量、模型取值、领域路由、frontmatter 完整度）；这次的笔记质量说明提示词里'代码/命令/SQL 逐字复制'的要求生效了。另一个待决：真实 config.json 未设 agentAdapter（默认只有 dsh），所以每日 cron 不会归档 codex 会话——要不要改成多 agent 需用户定。
+
 ## Session #2 - 2026-09-28 11:04
 
 **需求**：
