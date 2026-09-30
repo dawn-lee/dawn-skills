@@ -239,7 +239,7 @@ sessions/ 汇聚多 agent 后，索引表缺「来源」列看不出每条来自
 - `skills/obsidian-inbox/config.json（gitignore 不入库）- 运行时配置, agentAdapter 设为 dsh,qoder,claude,codex`
 
 **变更摘要**：
-按用户要求把 agentAdapter 改成四个 agent，但用户写的是产品名 qoder-cn（目录 ~/.qoder-cn），而登记名是 qoder——直接用会报『未登记』。加了别名表并**单向规范化**为登记名，核心理由是避免同一 agent 出现两个归档子目录（否则 qoder-cn 和 qoder 两种写法会分叉成 sessions/qoder-cn/ 与 sessions/qoder/）。规范化含大小写不敏感、同键去重；未知名仍报错列可用项。配置写入真实 config.json（gitignore，不入库）：dsh,qoder,claude,codex。实测真实归档（非 dry-run、走完整 LLM 链路）7 个候选：4 created（3 dsh + 首个 qoder 某看板产品看板缺数据）、2 appended（补记轮次，原 distilled* 标记与追加节均正确保留）、1 trivial 跳过、0 失败；索引 28 篇，来源分布 dsh 26 / qoder 1 / codex 1，新结构 sessions/{dsh 26, qoder 1, codex 1}。4 agent 在窗口内分布：dsh 6、qoder 1、claude 0、codex 0（老会话已出窗口，不会被自动归档，需回填）。selftest 19/19。
+按用户要求把 agentAdapter 改成四个 agent，但用户写的是产品名 qoder-cn（目录 ~/.qoder-cn），而登记名是 qoder——直接用会报『未登记』。加了别名表并**单向规范化**为登记名，核心理由是避免同一 agent 出现两个归档子目录（否则 qoder-cn 和 qoder 两种写法会分叉成 sessions/qoder-cn/ 与 sessions/qoder/）。规范化含大小写不敏感、同键去重；未知名仍报错列可用项。配置写入真实 config.json（gitignore，不入库）：dsh,qoder,claude,codex。实测真实归档（非 dry-run、走完整 LLM 链路）7 个候选：4 created（3 dsh + 首个 qoder 看板缺数据排查会话）、2 appended（补记轮次，原 distilled* 标记与追加节均正确保留）、1 trivial 跳过、0 失败；索引 28 篇，来源分布 dsh 26 / qoder 1 / codex 1，新结构 sessions/{dsh 26, qoder 1, codex 1}。4 agent 在窗口内分布：dsh 6、qoder 1、claude 0、codex 0（老会话已出窗口，不会被自动归档，需回填）。selftest 19/19。
 
 **遇到的问题**：
 - 别名规范化必须单向：规范名是 id 也是归档子目录名，若别名不折回规范名，同一 agent 的归档会分叉到两个目录，后续索引/账本按目录判定来源会分裂。4 个 claude 候选在当前窗口为 0（全量 180 都是老会话），所以本次真实归档没覆盖 claude 的写入路径——它和 codex/qoder 共用 adapter+writeNote 主干（已分别验证），但『4-agent 同时真跑』这个具体组合仍缺一次实测，下次 cron 或手动 --since-hours 回填时可补验。旧会话回填要用户决定：--since-hours 值拉大虽能吃进老会话，但 window 同时决定『补记已有会话』的范围，需先确认 archived.json 的现有记账能对齐（已有 25 条 dsh 记账在，回填 4 agent 时 --session 过滤最安全）。
