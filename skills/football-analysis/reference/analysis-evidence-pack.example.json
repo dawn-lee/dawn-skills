@@ -1,0 +1,77 @@
+{
+  "schema": "fdp.analysis-evidence-pack.v1",
+  "batch_id": "analysis-2026-09-06-example",
+  "matches": [
+    {
+      "match_id": "00000000-0000-4000-8000-000000000001",
+      "code": "001",
+      "supporting": [
+        {
+          "type": "form",
+          "side": "home",
+          "source": "historical_result_rolling",
+          "source_id": "form-home-last5",
+          "captured_at": "2026-09-06T08:00:00+08:00",
+          "summary": "主队最近五场的进攻与防守表现同时占优"
+        },
+        {
+          "type": "xg",
+          "side": "home",
+          "source": "frozen_analysis_input",
+          "source_id": "experience-snapshot-xg",
+          "captured_at": "2026-09-06T08:00:00+08:00",
+          "summary": "冻结赛前预期进球显示主队机会质量更高"
+        },
+        {
+          "type": "market",
+          "side": "home",
+          "source": "sporttery",
+          "source_id": "had-latest-snapshot",
+          "captured_at": "2026-09-06T08:00:00+08:00",
+          "summary": "欧赔去水后主胜仍是概率最高的单一方向"
+        }
+      ],
+      "opposing": [
+        {
+          "type": "injury",
+          "side": "home",
+          "source": "club_official",
+          "source_id": "injury-home-latest",
+          "captured_at": "2026-09-06T08:00:00+08:00",
+          "summary": "主队一名常规首发缺阵削弱前场轮换深度"
+        },
+        {
+          "type": "market",
+          "side": "draw",
+          "source": "sporttery",
+          "source_id": "had-baseline-snapshot",
+          "captured_at": "2026-09-06T06:30:00+08:00",
+          "summary": "平局去水概率仍构成主方向的主要尾部风险"
+        },
+        {
+          "type": "weather",
+          "side": "neutral",
+          "source": "official_weather",
+          "source_id": "weather-stadium-hourly",
+          "captured_at": "2026-09-06T08:00:00+08:00",
+          "summary": "比赛时段降雨可能降低传控效率并增加随机性"
+        }
+      ],
+      "context": {
+        "standings": { "status": "verified", "source_ids": ["standings-current"] },
+        "h2h": { "status": "unavailable", "source_ids": [], "reason": "同教练周期有效样本不足" },
+        "coaches": { "status": "verified", "source_ids": ["coach-home", "coach-away"] },
+        "referee": { "status": "unavailable", "source_ids": [], "reason": "赛前尚未公布执法裁判" },
+        "weather": { "status": "verified", "source_ids": ["weather-stadium-hourly"] }
+      },
+      "asian_handicap": {
+        "status": "verified",
+        "line": -0.75,
+        "home_odds": 1.92,
+        "away_odds": 1.96,
+        "source_id": "exchange-asian-latest",
+        "captured_at": "2026-09-06T08:00:00+08:00"
+      }
+    }
+  ]
+}

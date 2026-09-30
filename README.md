@@ -14,6 +14,8 @@
 | **db-sync** | 在数据库之间同步表数据，读取 DataGrip 配置自动发现数据源 | `db-sync.sh` | - |
 | **obsidian-inbox** | Obsidian 知识库沉淀：把会话中可复用的知识写进笔记库（自动 frontmatter、按 cwd 路由、写前查重），并提供检索通道；另含每日定时归档，把当天会话精炼成笔记落库。代码不含机器相关路径，换电脑跑一次 `init.mjs` + `install.mjs` 即可 | `note.mjs` `sediment.mjs` `init.mjs` `install.mjs` | - |
 | **crawl4ai** | 网页爬取与数据提取：基于 Crawl4AI，支持 JS 渲染页面、批量并发爬取、Markdown 提取、schema 生成式结构化提取（免 LLM） | `basic_crawler.py` `batch_crawler.py` `extraction_pipeline.py` | `complete-sdk-reference.md` |
+| **football-analysis** | 足球比赛分析：联赛/近况/xG 实力层 + 市场去水与 sharp 校准 + 泊松 Top8 比分带，输出 `AnalysisResult`；只做分析，不出 `BET/SKIP`、不设计串关与仓位 | 数据平台脚本，见 `FDP_ROOT` | `data-sources.md` `score-model.md` `injury-protocol.md` `tactical-intent.zh.md` `red-flags.md` 等 |
+| **football-betting** | 足球竞彩投注决策：消费 `AnalysisResult` 与体彩玩法概率，确定性生成两张票/收益池 `BetPlan`（命中率、覆盖盈利、价值、回报池），不重算比赛分析 | 数据平台脚本，见 `FDP_ROOT` | `jingcai-rules.md` `leg-probability-threshold.md` `postmortem-summary.md` |
 
 将持续更新多种技能到技能列表。
 
@@ -78,6 +80,19 @@ node scripts/install.mjs --status  # 自检
 - 归档补丁 `patch/headless-notes-only.yml` 里的 provider/密钥/模型是示例，需改成你自己的（或用配置项 `llm.patch` 指定）。
 - 其他环境变量（`OBSIDIAN_INBOX_CONFIG` / `OBSIDIAN_INBOX_STATE` / `DSH_HOME` / `DSH_BIN`）见技能内的 `SKILL.md`。
 
+### 配置 football-analysis / football-betting（需要数据平台）
+
+这两个技能是**一对**：`football-betting` 依赖 `football-analysis`，必须同时安装。它们负责消费数据平台的冻结赛前输入、产出 `AnalysisResult` 与投注 `BetPlan`，**本身不含数据采集与数据库代码**。
+
+```bash
+npx skills add https://github.com/dawn-lee/dawn-skills --skill football-analysis
+npx skills add https://github.com/dawn-lee/dawn-skills --skill football-betting
+```
+
+- 需要配置 `FDP_ROOT` 指向足球数据平台仓库（默认开发机路径 `<FDP_ROOT>`），否则相关脚本无法运行；未设置时技能会先向你确认路径，不会臆测。
+- 数据侧硬依赖：MySQL + Redis、`pnpm prisma generate` 可跑通、且已导出标准赛前输入。首次使用或数据结构变化时按技能内 `reference/pipeline-integration.md` 跑就绪度审计。
+- **投注方案、盈亏与 CLV 只写 `FDP_ROOT/memory` 与 `FDP_ROOT/data`**，不写进本仓库。
+
 ### 配置 wan2.7-video-skill（需要 API Key）
 
 **前提条件：** 需要阿里云账号
@@ -137,6 +152,16 @@ dawn-skills/
     │   ├── SKILL.md                            # 技能描述文件
     │   └── scripts
     │       └── dev-log.mjs                     # 读写脚本（snapshot/add/index/link/query）
+    ├── football-analysis                       # 足球比赛分析技能（FDP_ROOT 数据平台）
+    │   ├── SKILL.md                            # 分析协议（实力层→市场层→置信→比分带→玩法概率）
+    │   ├── RULES_BASELINE.md                   # 当前生效规则基线
+    │   └── reference                           # 数据源/伤停/比分模型/红旗/让球等
+    ├── football-betting                        # 足球竞彩投注决策技能（依赖 football-analysis）
+    │   ├── SKILL.md                            # 投注协议（两张票 v2 / 收益池 / EV 筛）
+    │   ├── RULES_BASELINE.md                   # 投注层规则基线
+    │   ├── changelog                           # 规则级变更记录
+    │   ├── reference                           # 竞彩规则/腿级门槛/复盘索引
+    │   └── scripts                             # preflight/生成器/验证器/收益池选择器
     ├── obsidian-inbox                          # Obsidian 知识库沉淀技能
     │   ├── SKILL.md                            # 技能描述文件（安装/配置 + 读写通道 + 定时归档）
     │   ├── config.example.json                 # 配置模板（真实 config.json 已 gitignore，不入库）
