@@ -405,6 +405,8 @@ function buildArchiveIndex(cfg) {
     return {
       date: String(fields.date ?? '').slice(0, 10) || '未知',
       domain: String(fields.domain ?? ''),
+      // 来源 agent（frontmatter source）；旧笔记缺字段时回退 dsh（历史默认）
+      source: String(fields.source ?? '').trim() || 'dsh',
       unclassified: String(fields.unclassified ?? '') === 'true',
       session: String(fields.session ?? ''),
       distilledInto: String(fields.distilled_into ?? ''),
@@ -425,6 +427,13 @@ function buildArchiveIndex(cfg) {
     .join('、');
   const pending = entries.filter((e) => e.unclassified || !e.domain).length;
   const distilled = entries.filter((e) => e.distilledInto).length;
+  // 按来源 agent 分布（多 agent 后一目了然各 harness 贡献多少）
+  const srcCounts = new Map();
+  for (const e of entries) srcCounts.set(e.source, (srcCounts.get(e.source) || 0) + 1);
+  const srcDist = [...srcCounts.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([a, n]) => `${a} ${n}`)
+    .join('、');
   // 提炼去处随配置变化，不要写死目录名
   const domainHint = cfg.domainRoots.length
     ? cfg.domainRoots.map((d) => `\`${d}/\``).join('、')
@@ -433,7 +442,7 @@ function buildArchiveIndex(cfg) {
   const lines = [
     buildFrontmatter({ type: 'index', source: 'archive', updated: fmtTime(Date.now()), tags: ['archive/归档', '索引'] }),
     '',
-    '# DSH 会话归档索引',
+    '# 会话归档索引',
     '',
     '> [!info] 这个目录是干什么的',
     '> 每次会话结束后，`sediment.mjs` 会把该会话精炼成**一篇归档笔记**（背景 / 结论 / 关键步骤 / 注意事项 / 产出与引用），作为**原始素材**留底——目的是兜住"当时没意识到值得沉淀"的知识。',
@@ -445,14 +454,15 @@ function buildArchiveIndex(cfg) {
     + `${pending ? `；另有 ${pending} 篇未归类（待补 \`domain\`）` : ''}。`,
     '',
     `按领域分布：${dist || '（暂无）'}`,
+    `按来源分布：${srcDist || '（暂无）'}`,
     '',
-    '| 日期 | 领域 | 归档笔记 | 提炼 | 会话 id |',
-    '|---|---|---|---|---|',
+    '| 日期 | 来源 | 领域 | 归档笔记 | 提炼 | 会话 id |',
+    '|---|---|---|---|---|---|',
   ];
   for (const e of entries) {
     const dom = e.domain ? `${e.domain}${e.unclassified ? ' ⚠' : ''}` : '⚠未标注';
     const dis = e.distilledInto ? `✅ ${e.distilledInto}` : '⏳ 待提炼';
-    lines.push(`| ${e.date} | ${dom} | [[${e.name}]] | ${dis} | \`${e.session || '-'}\` |`);
+    lines.push(`| ${e.date} | ${e.source} | ${dom} | [[${e.name}]] | ${dis} | \`${e.session || '-'}\` |`);
   }
   lines.push('');
   return { content: lines.join('\n'), count: entries.length, pending, path: `${relDir}/${INDEX_NAME}` };
