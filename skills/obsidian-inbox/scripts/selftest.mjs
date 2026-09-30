@@ -190,7 +190,8 @@ check('P4-1', '四个 adapter 都产出契约字段（id/cwd/turns）且统一�
   const cfg = loadConfig();
   const win = { from: Date.now() - 365 * 86400 * 1000, to: Date.now() + 3600 * 1000 };
   const seen = [];
-  for (const id of ['dsh', 'qoder', 'claude', 'codex']) {
+  const ran = [];
+  for (const id of ['dsh', 'qoder', 'claude', 'codex', 'workbuddy']) {
     cfg.agentAdapter = id;
     const a = getAdapters(cfg).find((x) => x.id === id);
     if (!a) throw new Error(`adapter ${id} 未登记`);
@@ -204,10 +205,13 @@ check('P4-1', '四个 adapter 都产出契约字段（id/cwd/turns）且统一�
         if (typeof t.prompt !== 'string') throw new Error(`${id}/${s.id} turn.prompt 非字符串`);
       }
     }
+    // 每个 adapter 都要跑到且不抛错（0 行也是有效结果，如 workbuddy 本机无会话）
+    ran.push(`${id}:${list.length}`);
     if (list.length) seen.push(`${id}:${list.length}`);
   }
+  if (ran.length !== 5) throw new Error(`只有 ${ran.length}/5 个 adapter 被执行`);
   if (!seen.length) throw new Error('所有 adapter 都返回 0 会话（本机应至少有 dsh 数据）');
-  return `样本数 ${seen.join(' ')}`;
+  return `执行 ${ran.length} 个；样本 ${seen.join(' ')}`;
 });
 
 check('P4-2', 'agentAdapter 多值与未知值处理（逗号分隔 / 未登记报错）', async () => {
@@ -357,7 +361,7 @@ check('L2-2', 'run-sediment.cmd 为 CRLF 行尾且纯 ASCII（GBK 代码页下�
 check('L2-3', '四个入口/脚本都能被语法解析', () => {
   const nodes = ['note.mjs', 'sediment.mjs', 'init.mjs', 'install.mjs', 'selftest.mjs', 'lib.mjs',
     'adapters/index.mjs', 'adapters/contract.mjs', 'adapters/dsh.mjs', 'adapters/qoder.mjs',
-    'adapters/claude.mjs', 'adapters/codex.mjs'];
+    'adapters/claude.mjs', 'adapters/codex.mjs', 'adapters/workbuddy.mjs'];
   for (const f of nodes) {
     const r = spawnSync(process.execPath, ['--check', join(SKILL_DIR, 'scripts', f)], { encoding: 'utf8' });
     assert(r.status === 0, `${f} 语法错误：${String(r.stderr).split('\n')[0]}`);

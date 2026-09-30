@@ -10,7 +10,7 @@
  *   claude Claude Code（~/.claude/projects，无 jsonl 时回退 history.jsonl）
  *   codex  Codex CLI/desktop（~/.codex/archived_sessions）
  *   cursor Cursor（SQLite，暂未实现 — 见 SKILL.md）
- *   workbuddy workbuddy（未定位到对话流，暂未实现）
+ *   workbuddy WorkBuddy（~/.workbuddy/workbuddy.db 的 sessions 表，SQLite 元数据）
  *
  * cfg.agentAdapter 可以是单个 id，或逗号分隔的多个 id（按序合并）。
  * 默认 'dsh'，保持原行为。
@@ -19,12 +19,14 @@ import * as dsh from './dsh.mjs';
 import * as qoder from './qoder.mjs';
 import * as claude from './claude.mjs';
 import * as codex from './codex.mjs';
+import * as workbuddy from './workbuddy.mjs';
 
 const REGISTRY = {
   dsh: { mod: dsh, transcript: true },
   qoder: { mod: qoder },
   claude: { mod: claude },
   codex: { mod: codex },
+  workbuddy: { mod: workbuddy },
 };
 
 export const AVAILABLE = Object.keys(REGISTRY);

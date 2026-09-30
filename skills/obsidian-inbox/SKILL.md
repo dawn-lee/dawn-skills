@@ -263,7 +263,7 @@ ask_user_question("这条笔记放哪？",
 | `claude` | `~/.claude/projects/<cwd编码>/<uuid>.jsonl`；无 jsonl 时回退 `~/.claude/history.jsonl` | ✅ |
 | `codex` | `~/.codex/archived_sessions/rollout-*.jsonl`（session_meta + response_item，跳过 role=developer） | ✅ |
 | `cursor` | `~/.config/Cursor/User/workspaceStorage/*/state.vscdb`（SQLite，`composerHeaders` 表） | ⏳ 暂未实现 |
-| `workbuddy` | `~/.workbuddy/…`（Electron 缓存/SWR，未定位到独立对话流） | ⏳ 暂未实现 |
+| `workbuddy` | `~/.workbuddy/workbuddy.db`（SQLite `sessions` 表，30 列元数据） | ✅ 元数据；消息在云端，无本地消息 → 归档需等消息表落地 |
 
 ```bash
 # 单个 agent
