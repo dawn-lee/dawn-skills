@@ -204,6 +204,19 @@ sessions/ 汇聚多 agent 后，索引表缺「来源」列看不出每条来自
 **遇到的问题**：
 - 最该记的教训：test 传的参数本身含'不存在'三字，成功消息里出现该字样，我的 grep 断言就'通过'了——自欺型测试，和之前'git diff 失败 stderr 没进判断'是同一类。抽 adapter 重构时没有对照原实现的语义细节（id 用 basename 保留前缀），是纯行为差异却没有任何测试覆盖，靠复检时拿 adapter id 与真实账本键对撞才发现；重构'等价性'必须用真实数据对撞而不是只跑通。归档区两次改名都没同步 state（那是运行时状态、不在 git 里，容易被漏），说明'改名'要连带检查所有引用该路径的持久化数据。我还在上一轮误删了 vault 备份（本想检查是否存在却执行了 rm），已重建 ~/obsidian-vault-backup-20260930-1442.tar.gz。distill 的 bug 也说明：写标记类命令必须在变更前完成全部校验（fail-fast），否则校验失败也留下副作用。
 
+### （续）续记：收尾修复全局指令与知识库笔记的旧结构
+
+**改动文件**：
+- `~/.dsh/AGENTS.md - 修改, 归档路径改 sessions/<agent>/、标签改 archive/待归类、补多 agent 与 distill 前置条件`
+- `Obsidian 库 dawn/dawn-skills/会话知识自动沉淀到 Obsidian 的方案.md - 改名+改内容, 去掉 DSH 前缀（方案已覆盖多 agent）、路径/状态目录/索引列/distill 前置/commit 真身全部更新`
+- `库内 6 个文件 11 处引用 - 修改, 同步改名后的 wikilink 与 distilled_into`
+
+**变更摘要**：
+复检报告里①②两项的收尾。① 全局指令 ~/.dsh/AGENTS.md 第 15 行仍写归档到 dsh-sessions/、带 dsh/待归类 标签（两轮改名后已失效），改为 sessions/<agent>/ 分层说明 + archive/待归类，并补上已支持 dsh/qoder/claude/codex 由 agentAdapter 决定与 distill 要求目标已存在的提示。② 知识库笔记 'DSH 会话知识自动沉淀到 Obsidian 的方案' 内容已过时（写 sessions/YYYY-MM-DD、state/archived.json、索引无来源列、commit hash 是历史改写前的死链），且标题带 DSH 前缀而方案已覆盖多 agent——更新内容后改名为 '会话知识自动沉淀到 Obsidian 的方案'（同步 H1），更新全库 11 处引用（含 3 篇归档的 distilled_into 标记），并修掉归档笔记里一处缺日期前缀的自引用断链（第 92 行 [[DSH 知识库沉淀技能与目录路由规则]] → 带日期，与同笔记第 120 行写法一致）。两个死 hash 按备份 bundle 内容比对解出真身：c256e7b→3e6e8f8、e298d0c→3694770。验证：AGENTS.md 旧结构 0 残留、笔记旧路径/旧标题/死 hash 全 0、全库真断链 0（仅剩 26 处文档占位符示例）、distilled_into 悬空 0、自检 19/19。
+
+**遇到的问题**：
+- 断链检查器有两处误报要记：①只索引 .md 当解析目标，把 ![[图片.png]] 的附件嵌入判成断链——实际图片在 cic/workspace/attachments/ 里好好的，Obsidian 按 basename 全库解析；②用 Path.stem 当目标名会剥掉扩展名，而图片链接带扩展名，必须同时收 f.stem 与 f.name。差点据此误报'两个图片断链'并去'修'一个本来没问题的引用。改名类操作的成本：一个笔记改名牵动 3 篇归档的 distilled_into、2 处索引、4 篇主题笔记的 wikilink，共 11 处，必须全库同步并复查悬空引用——这也是当初 wikilink 用 [[纯笔记名]] 而非带路径的好处（改路径不断链，但改名仍要同步）。.smart-env 里 6252 处旧路径是插件索引缓存，会自动重建，手工删反而丢嵌入向量，属不处理项。
+
 ## Session #2 - 2026-09-28 11:04
 
 **需求**：
