@@ -229,6 +229,21 @@ sessions/ 汇聚多 agent 后，索引表缺「来源」列看不出每条来自
 **遇到的问题**：
 - adapter 抽取字段要对着真实数据逐类行核实：codex rollout 有 session_meta / event_msg / response_item / turn_context 四类行，模型名不在最像的 session_meta 里而在 turn_context，只看 session_meta 就会一直显示未知模型。真实 LLM 归档的价值在于它能暴露 --no-llm 看不到的环节（精炼质量、模型取值、领域路由、frontmatter 完整度）；这次的笔记质量说明提示词里'代码/命令/SQL 逐字复制'的要求生效了。另一个待决：真实 config.json 未设 agentAdapter（默认只有 dsh），所以每日 cron 不会归档 codex 会话——要不要改成多 agent 需用户定。
 
+### （续）续记：agentAdapter 多值配置生效（dsh,qoder,claude,codex）+ 别名规范化
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/adapters/index.mjs - 修改, 加 ALIASES 别名表并单向规范化（qoder-cn→qoder、claude-code→claude、codex-cli→codex，大小写不敏感，重复去重）`
+- `skills/obsidian-inbox/config.example.json - 修改, agentAdapter 字段说明补别名`
+- `skills/obsidian-inbox/SKILL.md - 修改, 支持矩阵与示例补别名`
+- `skills/obsidian-inbox/scripts/selftest.mjs - 修改, P4-2 扩展别名断言（规范化/大小写/去重）`
+- `skills/obsidian-inbox/config.json（gitignore 不入库）- 运行时配置, agentAdapter 设为 dsh,qoder,claude,codex`
+
+**变更摘要**：
+按用户要求把 agentAdapter 改成四个 agent，但用户写的是产品名 qoder-cn（目录 ~/.qoder-cn），而登记名是 qoder——直接用会报『未登记』。加了别名表并**单向规范化**为登记名，核心理由是避免同一 agent 出现两个归档子目录（否则 qoder-cn 和 qoder 两种写法会分叉成 sessions/qoder-cn/ 与 sessions/qoder/）。规范化含大小写不敏感、同键去重；未知名仍报错列可用项。配置写入真实 config.json（gitignore，不入库）：dsh,qoder,claude,codex。实测真实归档（非 dry-run、走完整 LLM 链路）7 个候选：4 created（3 dsh + 首个 qoder 某看板产品看板缺数据）、2 appended（补记轮次，原 distilled* 标记与追加节均正确保留）、1 trivial 跳过、0 失败；索引 28 篇，来源分布 dsh 26 / qoder 1 / codex 1，新结构 sessions/{dsh 26, qoder 1, codex 1}。4 agent 在窗口内分布：dsh 6、qoder 1、claude 0、codex 0（老会话已出窗口，不会被自动归档，需回填）。selftest 19/19。
+
+**遇到的问题**：
+- 别名规范化必须单向：规范名是 id 也是归档子目录名，若别名不折回规范名，同一 agent 的归档会分叉到两个目录，后续索引/账本按目录判定来源会分裂。4 个 claude 候选在当前窗口为 0（全量 180 都是老会话），所以本次真实归档没覆盖 claude 的写入路径——它和 codex/qoder 共用 adapter+writeNote 主干（已分别验证），但『4-agent 同时真跑』这个具体组合仍缺一次实测，下次 cron 或手动 --since-hours 回填时可补验。旧会话回填要用户决定：--since-hours 值拉大虽能吃进老会话，但 window 同时决定『补记已有会话』的范围，需先确认 archived.json 的现有记账能对齐（已有 25 条 dsh 记账在，回填 4 agent 时 --session 过滤最安全）。
+
 ## Session #2 - 2026-09-28 11:04
 
 **需求**：
