@@ -14,7 +14,7 @@
     "llm.patch": "归档用 headless 补丁路径；null = 用技能自带的 patch/headless-notes-only.yml",
     "minAssistantChars": "有效内容量门槛，低于此值不归档",
     "digestBudgetChars": "喂给模型的摘要字数预算",
-    "agentAdapter": "会话数据源：dsh（默认）/ qoder / claude / codex，可逗号分隔多个（如 \"dsh,qoder\"）。Cursor、workbuddy 暂未实现，见 SKILL.md"
+    "agentAdapter": "会话数据源：dsh（默认）/ qoder / claude / codex / workbuddy，逗号分隔可多选（如 \"dsh,qoder,claude,codex\"）；别名 qoder-cn / claude-code / codex-cli 也接受，会规范化为登记名（归档目录用规范名，如 sessions/qoder/）"
   },
   "vault": "${HOME}/Documents/Obsidian Vault",
   "archiveDir": "sessions",

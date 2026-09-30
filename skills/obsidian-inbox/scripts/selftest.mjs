@@ -259,6 +259,13 @@ check('P4-2', 'agentAdapter 多值与未知值处理（逗号分隔 / 未登记�
   let threw2 = false;
   try { resolveAgents({ agentAdapter: 'dsh,nope' }); } catch { threw2 = true; }
   assert(threw2, '混合未知值应报错');
+  // 别名要规范化为登记名（否则同一 agent 会出现两个归档子目录）
+  const alias = resolveAgents({ agentAdapter: 'dsh,qoder-cn,claude,codex' });
+  assert(alias.join(',') === 'dsh,qoder,claude,codex', `别名未规范化：${alias}`);
+  const ci = resolveAgents({ agentAdapter: 'Qoder-CN' });
+  assert(ci.join(',') === 'qoder', `别名应大小写不敏感：${ci}`);
+  const dedup = resolveAgents({ agentAdapter: 'qoder,qoder-cn' });
+  assert(dedup.join(',') === 'qoder', `别名与规范名同时出现应去重：${dedup}`);
 });
 
 // ------------------------------------------------------------ P5 写通道安全（临时 vault）

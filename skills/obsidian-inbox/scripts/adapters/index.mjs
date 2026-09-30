@@ -6,8 +6,8 @@
  *
  * 支持的 agent（见 SKILL.md「多 agent 归档」）：
  *   dsh    默认，DSH 会话（投影 + transcript 兜底）
- *   qoder  Qoder-CN（~/.qoder-cn/projects）
- *   claude Claude Code（~/.claude/projects，无 jsonl 时回退 history.jsonl）
+ *   qoder  Qoder-CN（~/.qoder-cn/projects）；别名 qoder-cn 也接受
+ *   claude Claude Code（~/.claude/projects，无 jsonl 时回退 history.jsonl）；别名 claude-code
  *   codex  Codex CLI/desktop（~/.codex/archived_sessions）
  *   cursor Cursor（SQLite，暂未实现 — 见 SKILL.md）
  *   workbuddy WorkBuddy（~/.workbuddy/workbuddy.db 的 sessions 表，SQLite 元数据）
@@ -32,6 +32,18 @@ const REGISTRY = {
 export const AVAILABLE = Object.keys(REGISTRY);
 export const DEFAULT = 'dsh';
 
+/**
+ * 别名 → 规范 id。用户常按产品名写（Qoder-CN 的目录是 ~/.qoder-cn），
+ * 但归档子目录用规范 id（sessions/qoder/），否则同一个 agent 会出现两个目录。
+ */
+const ALIASES = {
+  'qoder-cn': 'qoder',
+  qodercn: 'qoder',
+  'claude-code': 'claude',
+  claudecode: 'claude',
+  'codex-cli': 'codex',
+};
+
 /** 把 cfg.agentAdapter 解析成已登记的 adapter id 列表（未登记的忽略并告警）。 */
 export function resolveAgents(cfg) {
   const raw = typeof cfg.agentAdapter === 'string' && cfg.agentAdapter.trim()
@@ -39,9 +51,10 @@ export function resolveAgents(cfg) {
   const ids = raw.split(',').map((s) => s.trim()).filter(Boolean);
   const found = [];
   const unknown = [];
-  for (const id of ids) {
+  for (const rawId of ids) {
+    const id = ALIASES[rawId.toLowerCase()] ?? rawId;   // 别名单向规范化为登记名
     if (REGISTRY[id]) { if (!found.includes(id)) found.push(id); }
-    else unknown.push(id);
+    else unknown.push(rawId);
   }
   if (unknown.length) {
     throw new Error(`未登记的 agentAdapter：${unknown.join('、')}；可用：${AVAILABLE.join('、')}`);

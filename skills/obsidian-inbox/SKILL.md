@@ -259,9 +259,9 @@ ask_user_question("这条笔记放哪？",
 | adapter | 数据源（本机实测） | 状态 |
 |---|---|---|
 | `dsh`（默认） | `$DSH_HOME`（`~/.dsh`）：投影 `storages/session_projcache/` + transcript 兜底 | ✅ |
-| `qoder` | `~/.qoder-cn/projects/<cwd编码>/<uuid>.jsonl`（type:user/assistant + content blocks） | ✅ |
-| `claude` | `~/.claude/projects/<cwd编码>/<uuid>.jsonl`；无 jsonl 时回退 `~/.claude/history.jsonl` | ✅ |
-| `codex` | `~/.codex/archived_sessions/rollout-*.jsonl`（session_meta + response_item，跳过 role=developer） | ✅ |
+| `qoder`（别名 `qoder-cn`） | `~/.qoder-cn/projects/<cwd编码>/<uuid>.jsonl`（type:user/assistant + content blocks） | ✅ |
+| `claude`（别名 `claude-code`） | `~/.claude/projects/<cwd编码>/<uuid>.jsonl`；无 jsonl 时回退 `~/.claude/history.jsonl` | ✅ |
+| `codex`（别名 `codex-cli`） | `~/.codex/archived_sessions/rollout-*.jsonl`（session_meta + turn_context + response_item，跳过 role=developer） | ✅ |
 | `cursor` | `~/.config/Cursor/User/workspaceStorage/*/state.vscdb`（SQLite，`composerHeaders` 表） | ⏳ 暂未实现 |
 | `workbuddy` | `~/.workbuddy/workbuddy.db`（SQLite `sessions` 表，30 列元数据） | ✅ 元数据；消息在云端，无本地消息 → 归档需等消息表落地 |
 
@@ -270,6 +270,7 @@ ask_user_question("这条笔记放哪？",
 #   "agentAdapter": "qoder"
 # 多 agent 合并（按 lastPromptAt 排序；--session 过滤对所有 agent 生效）
 #   "agentAdapter": "dsh,qoder,claude,codex"
+#   别名也接受（规范化为登记名，归档目录统一用规范名）：qoder-cn / claude-code / codex-cli
 ```
 
 - **归档产物按来源 agent 分层**落 `sessions/<agent>/`（如 `sessions/dsh/`、`sessions/codex/`），frontmatter 里
