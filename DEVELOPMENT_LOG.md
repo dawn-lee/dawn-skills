@@ -188,6 +188,22 @@ sessions/ 汇聚多 agent 后，索引表缺「来源」列看不出每条来自
 **遇到的问题**：
 - readdirSync 只读一层是分层的隐形坑——改目录结构时不改扫描逻辑，索引会静默漏读子目录（count 变 0 不报错），必须递归 + 断言 count。归档区拦截与 assertDirReady 的顺序是既有 bug、分层后暴露：目录存在性检查先跑会把'这是禁写区'误导成'目录不存在需 --mkdir'，应先判禁写再判存在。show --path 需带 .md 后缀（历史如此，测试时漏带误以为是分层 bug）。wikilink 用纯笔记名是当初的正确设计，分层移动零断链——若当初用了 [[sessions/名]] 带路径形式，这次改名会全断。
 
+### （续）续记：复检发现并修复 4 个真问题（含会导致 84 篇重复归档的严重回归）
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/adapters/dsh.mjs - 修改, 会话 id 恢复保留 session- 前缀（原剥前缀致账本全不匹配）`
+- `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 新增 findArchivedNoteBySession（路径失效按 id 找回，防重复建档）`
+- `skills/obsidian-inbox/scripts/note.mjs - 修改, distill 校验收炼目标存在且非归档区（原先无条件写标记）`
+- `skills/obsidian-inbox/scripts/selftest.mjs - 修改, 加 P4-3（锁 dsh id 契约）与 P5-1（distill 三态）`
+- `DEVELOPMENT_LOG.md - 修改, 修 1 处历史改写漏映射的 hash`
+- `~/.local/state/obsidian-inbox/archived.json - 数据修复, 23 条 notePath 从 dsh-sessions/ 迁到 sessions/dsh/`
+
+**变更摘要**：
+复检抓到 4 个真问题并修复。①最严重：dsh adapter 把会话 id 的 session- 前缀剥掉了（原 normalizeSession 用 basename(file,'.json') 保留前缀，抽 adapter 时写成 file.replace(/^session-/,'')），导致 adapter id 与 archived.json 的键完全对不上（实测 0/84 命中）——当天 23:00 的 cron 会把 84 个已归档会话全部当新会话重复建档；修复后 25/84 命中（= 仍在 projcache 的会话）、dry-run 的 unchanged 从 0 变 22。② 归档区两轮改名（dsh-sessions→sessions→分层）后 state 里 23 条 notePath 全部失效，而 writeNote 只靠'重算文件名恰好撞上现有文件'判定重复，改名或手动重命名就会重复建档；新增 findArchivedNoteBySession 按会话 id 在归档区递归找回并自愈状态，端到端验证通过（追加而非新建、原内容保留）。③ distill 用 if (hit && ...) 找目标，目标不存在时只跳过 domain 校准却仍无条件写 distilled:true —— 会把归档错误地从'待提炼'队列移除并留悬空引用；改为目标不存在即 fail、目标是归档区笔记也 fail。④ DEVELOPMENT_LOG 里 1 个 hash 是历史改写漏映射的旧 SHA（5a9680b），经备份 bundle 内容比对确认真身是 1e6caf4。回归测试：P4-3 锁 dsh id 契约（剥前缀时失败）、P5-1 distill 三态（不存在/归档目标失败、合法成功），均已验证能抓住回归。另外复检时我自己的测试污染了一篇真实归档（传假目标名把 distilled_into 覆盖），已从 .smart-env 缓存恢复原值 2026-09-28 16:26。自检 17→19 项。
+
+**遇到的问题**：
+- 最该记的教训：test 传的参数本身含'不存在'三字，成功消息里出现该字样，我的 grep 断言就'通过'了——自欺型测试，和之前'git diff 失败 stderr 没进判断'是同一类。抽 adapter 重构时没有对照原实现的语义细节（id 用 basename 保留前缀），是纯行为差异却没有任何测试覆盖，靠复检时拿 adapter id 与真实账本键对撞才发现；重构'等价性'必须用真实数据对撞而不是只跑通。归档区两次改名都没同步 state（那是运行时状态、不在 git 里，容易被漏），说明'改名'要连带检查所有引用该路径的持久化数据。我还在上一轮误删了 vault 备份（本想检查是否存在却执行了 rm），已重建 ~/obsidian-vault-backup-20260930-1442.tar.gz。distill 的 bug 也说明：写标记类命令必须在变更前完成全部校验（fail-fast），否则校验失败也留下副作用。
+
 ## Session #2 - 2026-09-28 11:04
 
 **需求**：
