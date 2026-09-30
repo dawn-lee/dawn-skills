@@ -210,9 +210,12 @@ export function routeDir(cfg, cwd, explicitDir) {
   if (explicitDir && explicitDir !== true) return toVaultRel(cfg, explicitDir);
   // 统一 `/` 分隔再匹配：Windows 的 cwd 可能是 `C:\x`，配置里的 `${HOME}` 已归一为 `/`
   const c = cwd ? resolve(expandVars(String(cwd))).replace(/\\/g, '/') : '';
+  // Windows 路径大小写不敏感：各家 agent 记的盘符大小写不一致（WorkBuddy 写 `小写盘符的同一路径`，
+  // 配置里写的是 `大写盘符的同一路径`），不忽略大小写就会整体掉到 defaultDir（踩过）。
+  const flags = process.platform === 'win32' ? 'i' : '';
   for (const r of cfg.routes) {
     let re;
-    try { re = new RegExp(r.pattern); } catch { continue; }
+    try { re = new RegExp(r.pattern, flags); } catch { continue; }
     const m = c ? re.exec(c) : null;
     if (!m) continue;
     return normalizeRel(String(r.dir ?? '').replace(/\{(\d+)\}/g, (_, i) => m[Number(i)] ?? ''));
@@ -398,6 +401,21 @@ export function atomicWrite(absPath, content) {
   return absPath;
 }
 
+/**
+ * 解析 YAML 标量：双引号值按 JSON 反转义，单引号值按 YAML 规则把 '' 还原成 '。
+ * 早先只剥引号、不做反转义，而 buildFrontmatter 用 JSON.stringify 转义 —— 于是
+ * `markDistilled()` 每重写一次 frontmatter，反斜杠就翻一倍
+ * （`cwd: "C:\\Users\\x"` → `"C:\\\\Users\\\\x"`），重复 distill 不幂等。
+ */
+function unquoteScalar(v) {
+  const s = String(v);
+  if (/^".*"$/.test(s)) {
+    try { return JSON.parse(s); } catch { return s.slice(1, -1); }
+  }
+  if (/^'.*'$/.test(s)) return s.slice(1, -1).replace(/''/g, "'");
+  return s;
+}
+
 export function parseFrontmatter(raw) {
   if (!raw.startsWith('---')) return { fields: {}, body: raw };
   const end = raw.indexOf('\n---', 3);
@@ -411,11 +429,11 @@ export function parseFrontmatter(raw) {
     const m = line.match(/^([A-Za-z0-9_\u4e00-\u9fff-]+):\s*(.*)$/);
     if (m) {
       const [, k, v] = m;
-      if (v === '') { fields[k] = []; listKey = k; } else { fields[k] = v.replace(/^["']|["']$/g, ''); listKey = null; }
+      if (v === '') { fields[k] = []; listKey = k; } else { fields[k] = unquoteScalar(v); listKey = null; }
       continue;
     }
     const li = line.match(/^\s+-\s+(.*)$/);
-    if (li && listKey) fields[listKey].push(li[1].replace(/^["']|["']$/g, ''));
+    if (li && listKey) fields[listKey].push(unquoteScalar(li[1]));
   }
   return { fields, body };
 }
@@ -705,35 +723,67 @@ export function findTranscript(sid) {
   return null;
 }
 
-/**
- * 抽原始 transcript 里助手**正文**（跳过 reasoning）的代码围栏块，按内容去重、长的在前。
- * 找不到 transcript 返回 null（与"有记录但没代码块"的 [] 区分开）。
- */
-export function transcriptCodeBlocks(sid, { minLen = 200 } = {}) {
-  const tr = findTranscript(sid);
-  if (!tr) return null;
+/** 解压 zstd 文件为文本；zstd 缺失时抛错，解压失败返回 null。 */
+export function readZstdText(path) {
   if (!zstdAvailable()) throw new Error(ZSTD_HINT);
-  const res = spawnSync('zstd', ['-dc', tr], { encoding: 'utf8', maxBuffer: 96 * 1024 * 1024 });
-  if (res.status !== 0) return [];
-  const out = [], seen = new Set();
-  for (const line of String(res.stdout ?? '').split('\n')) {
-    if (!line.trim()) continue;
-    let e;
-    try { e = JSON.parse(line); } catch { continue; }
-    if (e.type !== 'assistant/message') continue;
-    for (const p of e.data?.message?.content ?? []) {
-      if (!p || typeof p !== 'object' || p.type !== 'text') continue;
-      for (const m of String(p.text ?? '').matchAll(/```[a-zA-Z0-9_-]*\n([\s\S]*?)```/g)) {
-        const b = m[1].trim();
-        if (b.length < minLen) continue;
-        if (seen.has(b)) continue;
-        seen.add(b);
-        out.push(b);
+  const res = spawnSync('zstd', ['-dc', path], { encoding: 'utf8', maxBuffer: 96 * 1024 * 1024 });
+  return res.status === 0 ? String(res.stdout ?? '') : null;
+}
+
+/** 从一段文本里抽出 ``` 围栏块（≥ minLen 字，逐字保留、不做任何改写）。 */
+export function codeBlocksFromText(text, minLen = 200) {
+  const out = [];
+  for (const m of String(text ?? '').matchAll(/```[a-zA-Z0-9_-]*\n([\s\S]*?)```/g)) {
+    const b = m[1].trim();
+    if (b.length >= minLen) out.push(b);
+  }
+  return out;
+}
+
+/**
+ * DSH 的原始 transcript reader（默认实现，行为与旧版一致）：
+ * `$DSH_HOME/sessions/<slug>/<sid>/*.jsonl.zstd` → 解压 → 取 `assistant/message` 的 text 块。
+ */
+export const dshTranscriptReader = {
+  agent: 'dsh',
+  findTranscriptPath: findTranscript,
+  readAssistantTexts(path) {
+    const raw = readZstdText(path);
+    if (raw === null) return [];
+    const out = [];
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue;
+      let e;
+      try { e = JSON.parse(line); } catch { continue; }
+      if (e.type !== 'assistant/message') continue;
+      for (const p of e.data?.message?.content ?? []) {
+        if (p && typeof p === 'object' && p.type === 'text') out.push(String(p.text ?? ''));
       }
     }
+    return out;
+  },
+};
+
+/**
+ * 抽某会话原始 transcript 里助手**正文**（跳过 reasoning）的代码围栏块，按内容去重、长的在前。
+ * `reader` 决定去哪家找记录（见 adapters/index.mjs 的 transcriptReaderFor）：不传 = DSH（向后兼容）。
+ * 返回 null 表示"定位不到该会话的原始记录"，与"有记录但没代码块"的 [] 区分开。
+ */
+export function transcriptCodeBlocks(sid, { minLen = 200, reader = null } = {}) {
+  const r = reader ?? dshTranscriptReader;
+  const tr = typeof r.findTranscriptPath === 'function' ? r.findTranscriptPath(sid) : null;
+  if (!tr) return null;
+  const blocks = [];
+  const seen = new Set();
+  for (const text of r.readAssistantTexts(tr) ?? []) {
+    for (const b of codeBlocksFromText(text, minLen)) {
+      if (seen.has(b)) continue;
+      seen.add(b);
+      blocks.push(b);
+    }
   }
-  out.sort((a, b) => b.length - a.length);
-  return out;
+  blocks.sort((a, b) => b.length - a.length);
+  return blocks;
 }
 
 /**

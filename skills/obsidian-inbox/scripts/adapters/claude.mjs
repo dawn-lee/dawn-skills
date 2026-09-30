@@ -13,7 +13,7 @@ import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { writeSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { makeSession, textOf, toMs, inWindow, isNoisePrompt, cleanTitle } from './contract.mjs';
+import { makeSession, textOf, toMs, inWindow, isNoisePrompt, cleanTitle, cwdExcluded } from './contract.mjs';
 
 export const id = 'claude';
 export const label = 'Claude Code';
@@ -117,7 +117,7 @@ export function listSessions(cfg, win, args = {}) {
       if (only && !only.has(sid)) continue;
       const s = parseSessionFile(join(root, dir.name, f), sid);
       if (!s) continue;
-      if (exclude.some((p) => s.cwd.startsWith(p))) continue;
+      if (cwdExcluded(s, exclude)) continue;
       if (!only && !inWindow(s, win)) continue;
       out.push(s);
     }
@@ -127,7 +127,7 @@ export function listSessions(cfg, win, args = {}) {
     return out;
   }
   // 无 jsonl → 回退 history.jsonl（只有 prompt、没有 assistant 回复）
-  const fb = fromHistory(win, only).filter((s) => !exclude.some((p) => s.cwd.startsWith(p)));
+  const fb = fromHistory(win, only).filter((s) => !cwdExcluded(s, exclude));
   if (fb.length && !notifiedHistory) {
     notifiedHistory = true;
     writeSync(2, `[claude] projects/ 下无会话 jsonl，回退读 history.jsonl（${fb.length} 条只有 prompt、无回复，`

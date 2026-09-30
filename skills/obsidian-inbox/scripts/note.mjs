@@ -10,11 +10,11 @@
  *   node scripts/note.mjs show   --path "dawn/x.md" [--json]
  *   node scripts/note.mjs route  --cwd /abs/path [--json]
  *   node scripts/note.mjs distill --path "sessions/x.md" --into "[[主题笔记]]" [--note 说明] [--json]
- *   node scripts/note.mjs recover --session <会话id> --into "[[主题笔记]]" [--min-len 300] [--limit 20] [--dry-run] [--json]
+ *   node scripts/note.mjs recover --session <会话id> --into "[[主题笔记]]" [--source dsh|codex|workbuddy] [--min-len 300] [--limit 20] [--dry-run] [--json]
  *
  * 退出码：0 成功 / 2 用法错误 / 3 目标已存在（需 --append 或 --force） / 4 未找到
  */
-import { existsSync, statSync, readFileSync } from 'node:fs';
+import { existsSync, statSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, dirname, join, relative, sep } from 'node:path';
 import {
   loadConfig, routeDir, slugify, buildFrontmatter, atomicWrite, readNote,
@@ -22,6 +22,7 @@ import {
   readBodyArg, normalizeRel, assertNoteDir, listSubdirs, catalogEntries, assertDirReady,
   markDistilled, listNoteIndex, parseFrontmatter, acquireLock, transcriptCodeBlocks,
 } from './lib.mjs';
+import { transcriptReaderFor } from './adapters/index.mjs';
 
 // 下游提前关管道（如 `| head -1`）时安静退出，不要抛 EPIPE 栈
 process.stdout.on('error', (err) => { if (err?.code === 'EPIPE') process.exit(0); });
@@ -258,8 +259,28 @@ function cmdDistill() {
  * recover —— 归档时被截断/丢失的代码块，从原始 transcript 回补到目标主题笔记。
  * 与 recover 前的老做法（一次性脚本）等价，但成为可复用命令。
  */
+/**
+ * 找到某会话 id 对应的归档，返回它的 `source`（来源 agent）——
+ * recover 靠它决定去哪家读原始 transcript（DSH 的 zstd transcript / codex rollout / workbuddy jsonl）。
+ */
+function archiveSourceForSession(sid) {
+  const dir = join(cfg.vault, cfg.archiveDir);
+  let agents = [];
+  try { agents = readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name); } catch { return ''; }
+  for (const a of agents) {
+    let files = [];
+    try { files = readdirSync(join(dir, a)).filter((f) => f.endsWith('.md')); } catch { continue; }
+    for (const f of files) {
+      let fields;
+      try { ({ fields } = parseFrontmatter(readFileSync(join(dir, a, f), 'utf8'))); } catch { continue; }
+      if (String(fields.session ?? '') === sid) return String(fields.source ?? '');
+    }
+  }
+  return '';
+}
+
 function cmdRecover() {
-  if (typeof args.session !== 'string' || !args.session.trim()) fail(2, 'recover 需要 --session（DSH 会话 id）');
+  if (typeof args.session !== 'string' || !args.session.trim()) fail(2, 'recover 需要 --session（会话 id）');
   if (typeof args.into !== 'string' || !args.into.trim()) {
     fail(2, 'recover 需要 --into（目标主题笔记，如 "[[内部工具开发笔记]]"）');
   }
@@ -275,18 +296,26 @@ function cmdRecover() {
   const minLen = Number(args['min-len']) > 0 ? Number(args['min-len']) : 300;
   const limit = Number(args.limit) > 0 ? Number(args.limit) : 20;
 
-  const blocks = transcriptCodeBlocks(sid, { minLen });
-  if (blocks === null) fail(4, `找不到会话 ${sid} 的原始记录（transcript），无法回补`);
+  // 来源 agent 优先取 --source，其次读归档 frontmatter 的 source，最后按登记顺序回退
+  const source = typeof args.source === 'string' && args.source.trim()
+    ? args.source.trim()
+    : archiveSourceForSession(sid);
+  const reader = transcriptReaderFor(source);
+  const blocks = transcriptCodeBlocks(sid, { minLen, reader });
+  if (blocks === null) {
+    fail(4, `找不到会话 ${sid} 的原始记录（transcript，按 ${reader?.agent ?? 'dsh'} 查找），无法回补`
+      + `${source ? '' : '；该会话可能还没有归档，可用 --source <agent> 指定来源'}`);
+  }
   const existing = readFileSync(absPath, 'utf8');
   const missing = blocks
     .filter((b) => !existing.includes(b.slice(0, Math.min(200, b.length))))
     .slice(0, limit);
 
   if (!missing.length) {
-    const out = { ok: true, session: sid, target: hit, candidates: blocks.length, recovered: 0, dryRun: dryRun || undefined };
+    const out = { ok: true, session: sid, target: hit, reader: reader?.agent, candidates: blocks.length, recovered: 0, dryRun: dryRun || undefined };
     process.stdout.write(json
       ? `${JSON.stringify(out, null, 2)}\n`
-      : `无缺失代码块（原文 ${blocks.length} 块 ≥${minLen} 字，${hit} 已覆盖）\n`);
+      : `无缺失代码块（来源 ${reader?.agent ?? 'dsh'}，原文 ${blocks.length} 块 ≥${minLen} 字，${hit} 已覆盖）\n`);
     return;
   }
 
@@ -296,7 +325,7 @@ function cmdRecover() {
   try {
     if (!dryRun) {
       const body = [
-        `> 由 \`recover\` 从原始会话 \`${sid}\` 回补：这些代码块在归档时被截断/丢失。`,
+        `> 由 \`recover\` 从原始会话 \`${sid}\`（来源 ${reader?.agent ?? 'dsh'}）回补：这些代码块在归档时被截断/丢失。`,
         '',
         ...missing.flatMap((b, i) => [`### ${i + 1}. 代码块（${b.length} 字）`, '', '```', b, '```', '']),
       ].join('\n');
@@ -307,12 +336,12 @@ function cmdRecover() {
   }
   const bytes = missing.reduce((n, b) => n + b.length, 0);
   const out = {
-    ok: true, session: sid, target: hit, candidates: blocks.length,
+    ok: true, session: sid, target: hit, reader: reader?.agent, candidates: blocks.length,
     recovered: missing.length, bytes, dryRun: dryRun || undefined,
   };
   process.stdout.write(json
     ? `${JSON.stringify(out, null, 2)}\n`
-    : `${dryRun ? '[dry-run] ' : ''}${hit}：回补 ${missing.length}/${blocks.length} 个代码块（${bytes} 字）\n`);
+    : `${dryRun ? '[dry-run] ' : ''}${hit}：回补 ${missing.length}/${blocks.length} 个代码块（${bytes} 字，来源 ${reader?.agent ?? 'dsh'}）\n`);
 }
 
 function cmdRoute() {

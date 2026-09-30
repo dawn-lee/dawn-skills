@@ -12,8 +12,8 @@
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { dshProjcacheRoot, dshSessionsRoot } from '../lib.mjs';
-import { makeSession, toMs, inWindow } from './contract.mjs';
+import { dshProjcacheRoot, dshSessionsRoot, dshTranscriptReader } from '../lib.mjs';
+import { makeSession, toMs, inWindow, cwdExcluded } from './contract.mjs';
 
 export const id = 'dsh';
 export const label = 'DSH';
@@ -70,7 +70,7 @@ export function listSessions(cfg, win, args = {}) {
     try { j = JSON.parse(readFileSync(join(dir, f), 'utf8')); } catch { continue; }
     const s = normalize(f, j);
     if (only && !only.has(s.id)) continue;
-    if (exclude.some((p) => s.cwd.startsWith(p))) continue;
+    if (cwdExcluded(s, exclude)) continue;
     if (!only && !inWindow(s, win)) continue;
     out.push(s);
   }
@@ -105,3 +105,11 @@ export function findTranscriptPath(sid) {
 export function hasTranscript() {
   return existsSync(dshSessionsRoot());
 }
+
+/**
+ * 原始 transcript reader —— 供 `note.mjs recover` 回补被截断的代码块。
+ * DSH 的记录是 zstd 压缩的 jsonl（`assistant/message` → content[].text），
+ * 实现放在 lib.mjs（`dshTranscriptReader`），这里只是把同一份暴露给 registry，
+ * 让 `transcriptReaderFor('dsh')` 与其它 agent 用同一种形状。
+ */
+export const transcriptReader = dshTranscriptReader;

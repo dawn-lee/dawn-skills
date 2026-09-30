@@ -92,8 +92,19 @@ export function inWindow(s, win) {
   return s.lastPromptAt >= win.from && s.lastPromptAt <= win.to;
 }
 
-/** 按 --excludeCwdPrefixes 过滤（cwd 为空时不过滤，交给归档端判 unclassified）。 */
+/**
+ * 按 --excludeCwdPrefixes 过滤（cwd 为空时不过滤，交给归档端判 unclassified）。
+ * Windows 的 cwd 来自会话元数据，是 `C:\x\y` 反斜杠写法，而配置里的前缀在 loadConfig
+ * 阶段已归一成 `/` —— 直接 startsWith 永远不匹配（等于排除失效，实测会把 sediment
+ * 自己的 headless 工作目录也当会话扫进来）。这里统一分隔符；win32 下再按大小写不敏感比。
+ */
 export function cwdExcluded(s, excludePrefixes) {
   if (!s.cwd) return false;
-  return excludePrefixes.some((p) => s.cwd.startsWith(p));
+  const win = process.platform === 'win32';
+  const norm = (p) => {
+    const v = String(p).replace(/\\/g, '/');
+    return win ? v.toLowerCase() : v;
+  };
+  const cwd = norm(s.cwd);
+  return (excludePrefixes || []).some((p) => cwd.startsWith(norm(p)));
 }

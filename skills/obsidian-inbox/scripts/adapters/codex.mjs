@@ -17,7 +17,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { makeSession, textOf, toMs, inWindow, isNoisePrompt, cleanTitle } from './contract.mjs';
+import { makeSession, textOf, toMs, inWindow, isNoisePrompt, cleanTitle, cwdExcluded } from './contract.mjs';
 
 export const id = 'codex';
 export const label = 'Codex';
@@ -122,7 +122,7 @@ export function listSessions(cfg, win, args = {}) {
       // 文件名时间戳兜底（timestamp 缺失时）
       if (!s.lastPromptAt) s.lastPromptAt = timeFromName(fname) || (statSync(p).mtimeMs || 0);
       if (!s.createdAt) s.createdAt = s.lastPromptAt;
-      if (exclude.some((p2) => s.cwd.startsWith(p2))) continue;
+      if (cwdExcluded(s, exclude)) continue;
       if (!only && !inWindow(s, win)) continue;
       out.push(s);
     }
@@ -148,3 +148,32 @@ export function listSessions(cfg, win, args = {}) {
   out.sort((a, b) => a.lastPromptAt - b.lastPromptAt);
   return out;
 }
+
+/**
+ * 原始 transcript reader —— 供 `note.mjs recover` 回补被截断的代码块。
+ * codex 的 rollout 是**明文 jsonl**（不像 DSH 那样 zstd 压缩），
+ * 且归档 frontmatter 的 `session` 存的就是完整路径，所以先按路径直取、再按 id/文件名在
+ * archived_sessions 与 sessions/YYYY/MM/DD 下递归找。
+ */
+export const transcriptReader = {
+  agent: id,
+  findTranscriptPath(sid) {
+    const s = String(sid ?? '').trim();
+    if (!s) return null;
+    if (s.endsWith('.jsonl') && existsSync(s)) return s;
+    const base = s.split(/[\\/]/).pop().replace(/\.jsonl$/, '');
+    if (!base) return null;
+    for (const root of [sessionRoot(), liveRoot()]) {
+      for (const p of collectRollouts(root)) {
+        const f = p.split(/[\\/]/).pop();
+        if (f === `${base}.jsonl`) return p;
+      }
+    }
+    return null;
+  },
+  readAssistantTexts(path) {
+    const sid = String(path).split(/[\\/]/).pop().replace(/\.jsonl$/, '');
+    const s = parseFile(path, sid);
+    return (s?.turns ?? []).map((t) => t.response).filter(Boolean);
+  },
+};

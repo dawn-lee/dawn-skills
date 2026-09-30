@@ -24,15 +24,22 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, statSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { basename, delimiter, dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   SKILL_DIR, slugify, normalizeRel, routeDir, toVaultRel, expandVars, expandRoutePattern,
-  renderTemplate, xmlEscape, schedulerEnvPath,
+  renderTemplate, xmlEscape, schedulerEnvPath, parseFrontmatter, buildFrontmatter, codeBlocksFromText,
 } from './lib.mjs';
 
 const args = process.argv.slice(2);
 const json = args.includes('--json');
 const skipScrub = args.includes('--skip-scrub-check');
+
+/**
+ * 动态 import 的模块 URL：必须转成 `file://` URL ——
+ * `import('E:\\…')` 在 Windows 上会被当成 URL scheme `e:`（`ERR_UNSUPPORTED_ESM_URL_SCHEME`），
+ * C 盘同样报错，所以每个动态 import 都要走这里。
+ */
+const modUrl = (rel) => pathToFileURL(join(SKILL_DIR, rel)).href;
 
 const REPO_ROOT = resolve(SKILL_DIR, '..', '..');
 const results = [];
@@ -129,7 +136,7 @@ check('P2-1', 'win32 下状态目录落到 %LOCALAPPDATA%、共享配置落到 %
     process.env.LOCALAPPDATA = ${JSON.stringify(local)};
     process.env.APPDATA = ${JSON.stringify(roaming)};
     delete process.env.OBSIDIAN_INBOX_STATE;
-    import(${JSON.stringify(join(SKILL_DIR, 'scripts', 'lib.mjs'))}).then((m) => {
+    import(${JSON.stringify(pathToFileURL(join(SKILL_DIR, 'scripts', 'lib.mjs')).href)}).then((m) => {
       process.stdout.write(JSON.stringify({
         state: m.STATE_DIR, candidates: m.configCandidates(),
       }));
@@ -152,6 +159,35 @@ check('P2-2', 'win32 下 excludeCwdPrefixes 解析为绝对路径且分隔符统
   const cfg = { excludeCwdPrefixes: ['${HOME}/.local/state/obsidian-inbox'] };
   const resolved = resolve(expandVars(cfg.excludeCwdPrefixes[0]));
   assert(resolved === join(expandVars('~/.local/state/obsidian-inbox')), `解析结果=${resolved}`);
+});
+
+check('P2-3', 'frontmatter 解析/生成往返幂等（反斜杠不翻倍，distill 可重复标记）', () => {
+  // 踩过的坑：parseFrontmatter 只剥引号不反转义，而 buildFrontmatter 用 JSON.stringify 转义，
+  // 导致 markDistilled 每重写一次 frontmatter，cwd 里的反斜杠就翻一倍（14 篇归档被写坏）。
+  const raw = [
+    '---',
+    'type: session',
+    'cwd: "E:\\\\Project\\\\dawn\\\\football-data-platform"',
+    'updated: "2026-09-30 20:12"',
+    "title: '含 '' 单引号'",
+    'tags:',
+    '  - archive/归档',
+    '  - "带 空格"',
+    '---',
+    '',
+    '正文',
+    '',
+  ].join('\n');
+  const first = parseFrontmatter(raw);
+  assert(first.fields.cwd === '<FDP_ROOT>',
+    `cwd 未反转义：${JSON.stringify(first.fields.cwd)}`);
+  assert(first.fields.title === "含 ' 单引号", `单引号未按 YAML 规则还原：${JSON.stringify(first.fields.title)}`);
+  const rebuilt = `${buildFrontmatter(first.fields)}\n\n${first.body}`;
+  const second = parseFrontmatter(rebuilt);
+  assert(JSON.stringify(second.fields) === JSON.stringify(first.fields),
+    `往返后字段变化：${JSON.stringify(second.fields)}`);
+  assert(rebuilt.includes('cwd: "E:\\\\Project\\\\dawn\\\\football-data-platform"'),
+    `重新生成时转义层数不对：${rebuilt.split('\n').find((l) => l.startsWith('cwd:'))}`);
 });
 
 // ------------------------------------------------------------ P3 调度模板渲染
@@ -186,8 +222,8 @@ check('P3-2', 'XML 转义后无裸 & / < / > （路径含 & 的机器上不会�
 // ------------------------------------------------------------ P4 adapter 契约
 
 check('P4-1', '四个 adapter 都产出契约字段（id/cwd/turns）且统一形状', async () => {
-  const { getAdapters } = await import(join(SKILL_DIR, 'scripts', 'adapters', 'index.mjs'));
-  const { loadConfig } = await import(join(SKILL_DIR, 'scripts', 'lib.mjs'));
+  const { getAdapters } = await import(modUrl('scripts/adapters/index.mjs'));
+  const { loadConfig } = await import(modUrl('scripts/lib.mjs'));
   const cfg = loadConfig();
   const win = { from: Date.now() - 365 * 86400 * 1000, to: Date.now() + 3600 * 1000 };
   const seen = [];
@@ -234,7 +270,7 @@ check('P4-3', 'dsh adapter 的会话 id 保留 session- 前缀（须与账本/�
       },
     }), 'utf8');
     process.env.DSH_HOME = tmp;
-    const m = await import(join(SKILL_DIR, 'scripts', 'adapters', 'dsh.mjs'));
+    const m = await import(modUrl('scripts/adapters/dsh.mjs'));
     const list = m.listSessions({ archiveDir: 'sessions', excludeCwdPrefixes: [] },
       { from: 0, to: Date.now() + 3600 * 1000 }, {});
     assert(list.length === 1, `应解析出 1 个会话，实际 ${list.length}`);
@@ -248,7 +284,7 @@ check('P4-3', 'dsh adapter 的会话 id 保留 session- 前缀（须与账本/�
 });
 
 check('P4-2', 'agentAdapter 多值与未知值处理（逗号分隔 / 未登记报错）', async () => {
-  const { resolveAgents } = await import(join(SKILL_DIR, 'scripts', 'adapters', 'index.mjs'));
+  const { resolveAgents } = await import(modUrl('scripts/adapters/index.mjs'));
   const a = resolveAgents({ agentAdapter: 'dsh,qoder' });
   assert(a.length === 2 && a[0] === 'dsh', `多值解析错: ${a}`);
   const b = resolveAgents({});
@@ -318,7 +354,7 @@ check('P5-2', '同名会话防撞（一批内多会话撞标题→加后缀分�
     mkdirSync(dir, { recursive: true });
     const cfg = { vault, archiveDir: 'sessions' };
     // 动态 import 到已加载的 sediment（isMain 守卫不会执行主流程）
-    return import(join(SKILL_DIR, 'scripts', 'sediment.mjs')).then((m) => {
+    return import(modUrl('scripts/sediment.mjs')).then((m) => {
       const rc = m.resolveCollision;
       if (!rc) return 'resolveCollision 未导出（跳过）';
       // 3 个不同会话撞同一个不存在的目标 → 依次拿到 _2/_3
@@ -336,6 +372,44 @@ check('P5-2', '同名会话防撞（一批内多会话撞标题→加后缀分�
   } finally {
     // finally 对 Promise 无法立即收尾，defer 到 then 后
     setTimeout(() => rmSync(tmp, { recursive: true, force: true }), 0);
+  }
+});
+
+check('P5-3', 'recover 按来源 agent 选 transcript reader，且围栏块抽取逐字保留', async () => {
+  const { transcriptReaderFor } = await import(modUrl('scripts/adapters/index.mjs'));
+  assert(transcriptReaderFor('dsh').agent === 'dsh', 'dsh 应拿到 DSH reader');
+  assert(transcriptReaderFor('codex').agent === 'codex', 'codex 应拿到 codex reader');
+  assert(transcriptReaderFor('workbuddy').agent === 'workbuddy', 'workbuddy 应拿到 workbuddy reader');
+  assert(transcriptReaderFor('qoder-cn').agent === 'dsh', '没实现 reader 的来源应兜底（qoder → dsh）');
+
+  const dir = mkdtempSync(join(tmpdir(), 'oi-reader-'));
+  try {
+    // workbuddy 格式：type=message + role + content[].input_text/output_text，提问包在 <user_query> 里
+    const wb = join(dir, 'wb.jsonl');
+    writeFileSync(wb, [
+      JSON.stringify({ type: 'message', role: 'user', content: [{ type: 'input_text', text: '<system-reminder>x</system-reminder><user_query>问题</user_query>' }] }),
+      JSON.stringify({ type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '```bash\nls -la\n```' }] }),
+    ].join('\n') + '\n', 'utf8');
+    const wbTexts = transcriptReaderFor('workbuddy').readAssistantTexts(wb);
+    assert(wbTexts.length === 1 && wbTexts[0].includes('ls -la'), `workbuddy reader 抽取异常：${JSON.stringify(wbTexts)}`);
+
+    // codex 格式：response_item + payload{type:message, role, content[]}
+    const cx = join(dir, 'cx.jsonl');
+    writeFileSync(cx, [
+      JSON.stringify({ type: 'response_item', timestamp: '2026-07-07T12:00:00Z', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: '问题' }] } }),
+      JSON.stringify({ type: 'response_item', timestamp: '2026-07-07T12:00:01Z', payload: { type: 'message', role: 'assistant', content: [{ type: 'output_text', text: '答案 ```ts\nconst a = 1;\n```' }] } }),
+    ].join('\n') + '\n', 'utf8');
+    const cxTexts = transcriptReaderFor('codex').readAssistantTexts(cx);
+    assert(cxTexts.length === 1 && cxTexts[0].includes('const a = 1;'), `codex reader 抽取异常：${JSON.stringify(cxTexts)}`);
+
+    // 围栏块：≥minLen 才收，内容逐字保留
+    const block = 'x'.repeat(40);
+    const blocks = codeBlocksFromText(`前言\n\`\`\`bash\necho hi\n\`\`\`\n后记\n\`\`\`python\n${block}\n\`\`\``, 20);
+    assert(blocks.length === 1, `≥20 字的块应只抽到 1 个，实得 ${blocks.length}`);
+    assert(blocks[0] === block, '代码块内容必须逐字保留（不能被 trim 或改写）');
+    return 'reader 选择 + 两种格式抽取 + 围栏块去短 均正常';
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 

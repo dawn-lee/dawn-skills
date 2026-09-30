@@ -10,7 +10,7 @@
  *   claude Claude Code（~/.claude/projects，无 jsonl 时回退 history.jsonl）；别名 claude-code
  *   codex  Codex CLI/desktop（~/.codex/archived_sessions）
  *   cursor Cursor（SQLite，暂未实现 — 见 SKILL.md）
- *   workbuddy WorkBuddy（~/.workbuddy/workbuddy.db 的 sessions 表，SQLite 元数据）
+ *   workbuddy WorkBuddy（~/.workbuddy/projects/<cwd编码>/<uuid>.jsonl 正文 + workbuddy.db 元数据）
  *
  * cfg.agentAdapter 可以是单个 id，或逗号分隔的多个 id（按序合并）。
  * 默认 'dsh'，保持原行为。
@@ -20,6 +20,7 @@ import * as qoder from './qoder.mjs';
 import * as claude from './claude.mjs';
 import * as codex from './codex.mjs';
 import * as workbuddy from './workbuddy.mjs';
+import { dshTranscriptReader } from '../lib.mjs';
 
 const REGISTRY = {
   dsh: { mod: dsh, transcript: true },
@@ -72,4 +73,25 @@ export function getAdapters(cfg) {
 export function transcriptAdapter(cfg) {
   const list = getAdapters(cfg);
   return list.find((a) => a.transcript) || REGISTRY[DEFAULT] ? list.find((a) => a.transcript) || { id: DEFAULT, ...REGISTRY[DEFAULT] } : null;
+}
+
+/**
+ * `recover` 回补代码块时用：按**来源 agent** 选原始 transcript 的 reader。
+ *
+ * 之前 recover 写死走 DSH 的 transcript 定位（`lib.findTranscript`），codex / workbuddy
+ * 的归档一律报"找不到会话的原始记录"。现在：dsh 用 lib 里的 reader（zstd + assistant/message），
+ * codex / workbuddy 各自在 adapter 里实现（明文 rollout / projects jsonl）。
+ * 来源未知或该家没有 reader 时，退回第一个有 reader 的登记项，最后兜底 DSH。
+ */
+export function transcriptReaderFor(source) {
+  const raw = String(source ?? '').trim().toLowerCase();
+  const wanted = ALIASES[raw] ?? raw;
+  if (!wanted || wanted === DEFAULT) return dshTranscriptReader;
+  const direct = REGISTRY[wanted]?.mod?.transcriptReader;
+  if (direct) return direct;
+  for (const mid of Object.keys(REGISTRY)) {
+    const r = REGISTRY[mid]?.mod?.transcriptReader;
+    if (r) return r;
+  }
+  return dshTranscriptReader;
 }

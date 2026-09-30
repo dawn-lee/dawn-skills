@@ -261,9 +261,9 @@ ask_user_question("这条笔记放哪？",
 | `dsh`（默认） | `$DSH_HOME`（`~/.dsh`）：投影 `storages/session_projcache/` + transcript 兜底 | ✅ |
 | `qoder`（别名 `qoder-cn`） | `~/.qoder-cn/projects/<cwd编码>/<uuid>.jsonl`（type:user/assistant + content blocks） | ✅ |
 | `claude`（别名 `claude-code`） | `~/.claude/projects/<cwd编码>/<uuid>.jsonl`；无 jsonl 时回退 `~/.claude/history.jsonl` | ✅ |
-| `codex`（别名 `codex-cli`） | `~/.codex/archived_sessions/rollout-*.jsonl`（session_meta + turn_context + response_item，跳过 role=developer） | ✅ |
+| `codex`（别名 `codex-cli`） | `~/.codex/archived_sessions/rollout-*.jsonl` + 活跃会话 `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`（session_meta + turn_context + response_item，跳过 role=developer） | ✅ |
 | `cursor` | `~/.config/Cursor/User/workspaceStorage/*/state.vscdb`（SQLite，`composerHeaders` 表） | ⏳ 暂未实现 |
-| `workbuddy` | `~/.workbuddy/workbuddy.db`（SQLite `sessions` 表，30 列元数据） | ✅ 元数据；消息在云端，无本地消息 → 归档需等消息表落地 |
+| `workbuddy` | 正文：`~/.workbuddy/projects/<cwd编码>/<uuid>.jsonl`（type:message + role:user/assistant + content blocks，`<user_query>` 里是真正的提问）；元数据：`~/.workbuddy/workbuddy.db` 的 `sessions` 表（补标题/模型/时间，兜住没有 jsonl 的会话） | ✅ |
 
 ```bash
 # 单个 agent
@@ -357,9 +357,19 @@ node scripts/note.mjs recover \
   --min-len 300 --dry-run      # 先预览：候选块数 / 缺失块数，不落盘
 ```
 
-命令解压该会话的原始 transcript → 抽**助手正文**里的代码围栏块（跳过 reasoning）→ 与目标笔记逐块比对（按每块前 200 字）→ 缺失的追加到 `## 代码块回补` 小节（重复执行幂等，固定小节名不重复建）。
+命令按**来源 agent** 定位该会话的原始记录 → 抽**助手正文**里的代码围栏块（跳过 reasoning）→ 与目标笔记逐块比对（按每块前 200 字）→ 缺失的追加到 `## 代码块回补` 小节（重复执行幂等，固定小节名不重复建）。
+
+| 来源 | 去哪读 | 形态 |
+|---|---|---|
+| `dsh`（默认） | `$DSH_HOME/sessions/<slug>/<sid>/*.jsonl.zstd` | zstd 压缩，`assistant/message` → `content[].type=text` |
+| `codex` | `$CODEX_HOME/{sessions,archived_sessions}/**/rollout-*.jsonl` | 明文，`response_item` → `payload.content[].type=output_text` |
+| `workbuddy` | `$WORKBUDDY_HOME/projects/<cwd编码>/<sid>.jsonl` | 明文，`type=message,role=assistant` → `content[].type=output_text` |
+
+来源默认取该会话**归档 frontmatter 的 `source`**（没有归档时用 `--source dsh|codex|workbuddy` 显式指定；未登记/未实现 reader 的来源会兜底到 dsh，输出里会打印实际用的 reader）。
 
 > ⚠ **先 `--dry-run` 看**：比对是"原文逐字"。如果目标笔记的内容是**精炼/改写**过的（不是原样粘贴），原文块会被判成"缺失"而重复补入。要"补全原样内容"还是"保持精炼笔记"，由你看过预览后决定。
+
+> ⚠ **只扫助手正文里的围栏块**：各家的差异要心里有数——DSH / claude / qoder 的助手回复常带 ``` 代码块，`recover` 命中率高；而 **codex / workbuddy 的内容主要写在工具调用参数里**（写文件、跑脚本的参数），助手正文里的围栏块很少，所以这两家常常返回「无缺失代码块」。要回补这两家的工具参数内容，得直接看 transcript（路径见上表），别指望 `recover`。
 
 ---
 

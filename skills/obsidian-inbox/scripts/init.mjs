@@ -111,8 +111,13 @@ function buildConfig({ preset, vaultRel, projectsRoot, containers, soft, default
     minAssistantChars: 300,
     digestBudgetChars: 24000,
     searchExclude: ['.obsidian', '.trash', '.smart-env', '.git', 'copilot/copilot-conversations'],
-    // 这两个目录是技能自身的状态/源码位置，归档时排除，避免自我归档
-    excludeCwdPrefixes: ['${HOME}/.local/state/obsidian-inbox', '${HOME}/.agents/skills/obsidian-inbox'],
+    // 这两个目录（+ Windows 的 %LOCALAPPDATA%\obsidian-inbox）是技能自身的状态/源码位置，
+    // 归档时排除，避免把 sediment 自己跑的 headless 会话也当成用户会话归档
+    excludeCwdPrefixes: [
+      '${HOME}/.local/state/obsidian-inbox',
+      '${HOME}/AppData/Local/obsidian-inbox',
+      '${HOME}/.agents/skills/obsidian-inbox',
+    ],
     llm: { command: null, patch: null, timeoutMs: 600000, extraArgs: [] },
   };
 

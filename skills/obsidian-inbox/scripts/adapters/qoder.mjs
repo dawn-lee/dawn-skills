@@ -15,7 +15,7 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { makeSession, textOf, toMs, inWindow, isNoisePrompt, cleanTitle } from './contract.mjs';
+import { makeSession, textOf, toMs, inWindow, isNoisePrompt, cleanTitle, cwdExcluded } from './contract.mjs';
 
 export const id = 'qoder';
 export const label = 'Qoder';
@@ -93,7 +93,7 @@ export function listSessions(cfg, win, args = {}) {
       if (only && !only.has(sid)) continue;
       const s = parseFile(join(root, dir.name, f), sid);
       if (!s) continue;
-      if (exclude.some((p) => s.cwd.startsWith(p))) continue;
+      if (cwdExcluded(s, exclude)) continue;
       if (!only && !inWindow(s, win)) continue;
       out.push(s);
     }

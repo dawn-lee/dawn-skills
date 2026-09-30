@@ -251,6 +251,22 @@ function buildDigest(s, cfg, fromTurn, inventory) {
 
 let warnedNoPatch = false;
 
+/**
+ * 跨平台启动 dsh：Windows 的 dsh 是 `dsh.cmd`，而 Node ≥18.20（安全修复）拒绝直接
+ * spawn 批处理，`spawnSync('...\\dsh.cmd', args)` 会直接 EINVAL（本机 node 24 实测）。
+ * 这里显式交给 cmd.exe，并把整条命令行拼成**单个字符串**——同时避开
+ * `shell: true` + args 数组的 DEP0190（参数不转义只拼接）告警。
+ */
+function spawnDsh(dshBin, args, opts) {
+  const batch = process.platform === 'win32' && /\.(cmd|bat)$/i.test(String(dshBin));
+  if (!batch) return spawnSync(dshBin, args, opts);
+  const quote = (v) => {
+    const s = String(v);
+    return /[\s"&|<>^()]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  return spawnSync([quote(dshBin), ...args.map(quote)].join(' '), { ...opts, shell: true });
+}
+
 function runLlm(dshBin, prompt, cfg) {
   const patchPath = resolvePatchPath(cfg);
   const args = ['--profile', 'headless'];
@@ -265,7 +281,7 @@ function runLlm(dshBin, prompt, cfg) {
   args.push('-');
   const env = { ...process.env };
   env.PATH = [dirname(process.execPath), dirname(dshBin), env.PATH].filter(Boolean).join(delimiter);
-  const res = spawnSync(dshBin, args, {
+  const res = spawnDsh(dshBin, args, {
     input: prompt,
     cwd: WORK_DIR,
     env,
