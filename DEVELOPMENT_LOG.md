@@ -215,7 +215,7 @@ sessions/ 汇聚多 agent 后，索引表缺「来源」列看不出每条来自
 复检报告里①②两项的收尾。① 全局指令 ~/.dsh/AGENTS.md 第 15 行仍写归档到 dsh-sessions/、带 dsh/待归类 标签（两轮改名后已失效），改为 sessions/<agent>/ 分层说明 + archive/待归类，并补上已支持 dsh/qoder/claude/codex 由 agentAdapter 决定与 distill 要求目标已存在的提示。② 知识库笔记 'DSH 会话知识自动沉淀到 Obsidian 的方案' 内容已过时（写 sessions/YYYY-MM-DD、state/archived.json、索引无来源列、commit hash 是历史改写前的死链），且标题带 DSH 前缀而方案已覆盖多 agent——更新内容后改名为 '会话知识自动沉淀到 Obsidian 的方案'（同步 H1），更新全库 11 处引用（含 3 篇归档的 distilled_into 标记），并修掉归档笔记里一处缺日期前缀的自引用断链（第 92 行 [[DSH 知识库沉淀技能与目录路由规则]] → 带日期，与同笔记第 120 行写法一致）。两个死 hash 按备份 bundle 内容比对解出真身：c256e7b→3e6e8f8、e298d0c→3694770。验证：AGENTS.md 旧结构 0 残留、笔记旧路径/旧标题/死 hash 全 0、全库真断链 0（仅剩 26 处文档占位符示例）、distilled_into 悬空 0、自检 19/19。
 
 **遇到的问题**：
-- 断链检查器有两处误报要记：①只索引 .md 当解析目标，把 ![[图片.png]] 的附件嵌入判成断链——实际图片在 cic/workspace/attachments/ 里好好的，Obsidian 按 basename 全库解析；②用 Path.stem 当目标名会剥掉扩展名，而图片链接带扩展名，必须同时收 f.stem 与 f.name。差点据此误报'两个图片断链'并去'修'一个本来没问题的引用。改名类操作的成本：一个笔记改名牵动 3 篇归档的 distilled_into、2 处索引、4 篇主题笔记的 wikilink，共 11 处，必须全库同步并复查悬空引用——这也是当初 wikilink 用 [[纯笔记名]] 而非带路径的好处（改路径不断链，但改名仍要同步）。.smart-env 里 6252 处旧路径是插件索引缓存，会自动重建，手工删反而丢嵌入向量，属不处理项。
+- 断链检查器有两处误报要记：①只索引 .md 当解析目标，把 ![[图片.png]] 的附件嵌入判成断链——实际图片在知识库的 attachments 目录里好好的，Obsidian 按 basename 全库解析；②用 Path.stem 当目标名会剥掉扩展名，而图片链接带扩展名，必须同时收 f.stem 与 f.name。差点据此误报'两个图片断链'并去'修'一个本来没问题的引用。改名类操作的成本：一个笔记改名牵动 3 篇归档的 distilled_into、2 处索引、4 篇主题笔记的 wikilink，共 11 处，必须全库同步并复查悬空引用——这也是当初 wikilink 用 [[纯笔记名]] 而非带路径的好处（改路径不断链，但改名仍要同步）。.smart-env 里 6252 处旧路径是插件索引缓存，会自动重建，手工删反而丢嵌入向量，属不处理项。
 
 ## Session #2 - 2026-09-28 11:04
 
