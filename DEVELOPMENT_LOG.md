@@ -147,6 +147,23 @@ obsidian-inbox, skill 开发, 知识库, 跨平台
 **遇到的问题**：
 - 本机 workbuddy sessions 表 0 行（还没建过会话），无法用真实数据端到端验证，只能用按真实 schema 造的 fixture 验证解析逻辑——这是本次最大的局限，adapter 要等真有会话才能实测全链路。消息在云端/未迁移（sessions 表 30 列里无 message 列），adapter 当前只取元数据，turns 恒为空，意味着即使会话有数据、归档也会判 trivial——需要等 workbuddy 落地消息表才能真正归档。没引入 better-sqlite3 之类 node sqlite 模块（会破坏零依赖原则），改用 Python 标准库 sqlite3（系统自带，与 db-sync 既有模式一致）。已核实 codebuddy-sessions.vscdb 等 legacy 路径都不存在，避免了在错误位置找数据。
 
+### （续）续记：归档区 dsh-sessions 改名 sessions + 标签泛化 archive/
+
+**改动文件**：
+- `skills/obsidian-inbox/config.json - 修改, archiveDir → sessions`
+- `skills/obsidian-inbox/config.example.json - 修改, archiveDir → sessions + 字段说明`
+- `skills/obsidian-inbox/scripts/lib.mjs - 修改, archiveDir 默认值 → sessions`
+- `skills/obsidian-inbox/scripts/init.mjs - 修改, archiveDir 默认值 → sessions`
+- `skills/obsidian-inbox/scripts/sediment.mjs - 修改, 标签前缀 → archive/归档、索引 source → archive、注释去 DSH 专有措辞`
+- `skills/obsidian-inbox/scripts/note.mjs - 修改, 用法提示 dsh-sessions → sessions`
+- `skills/obsidian-inbox/SKILL.md - 修改, 12 处路径与标签描述同步 + 多 agent 小节标签说明修正`
+
+**变更摘要**：
+接入多 agent 后 dsh-sessions/ 目录名与 dsh/归档 标签已名不符实（可归档 qoder/claude/codex/workbuddy）。按三个决策（目录改 sessions/、标签全泛化 archive/xxx、10+ 篇交叉引用全改）执行：配置层 archiveDir 四处默认值改 sessions；代码层标签前缀从 agent 派生的 ${_agent}/归档 改为统一 archive/归档（索引 source 改 archive，归档笔记的 source 保留 agent 因为这才是来源字段的职责）；vault 侧 tar 备份后整体改名 dsh-sessions → sessions（24 篇含索引页，23 个 wikilink 因是 [[笔记名]] 形式不受目录移动影响），25 篇 frontmatter 标签、11 篇正文+frontmatter 交叉引用（含 8 处 'source: 提炼自 dsh-sessions 会话归档'）全改。SKILL.md 12 处同步，并修正多 agent 小节里标签描述与实现不一致处（原写 qoder/归档，实际是 archive/归档）。校验全绿：全库 0 残留 dsh-sessions、0 残留旧标签、sessions/ 24 篇索引页 23 wikilink 完好、dry-run 计划落 sessions/、selftest 17/17。DEVELOPMENT_LOG.md 保留旧名不改（历史事实）。
+
+**遇到的问题**：
+- 标签比目录更需要泛化：24 篇旧笔记的 source: dsh 保留（历史事实——这些确实来自 DSH，区分来源本就是 source 字段职责，改它等于篡改历史），但 tags 从 dsh/ 归档 改 archive/归档 让 Dataview 能统一按 archive/ 检索多 agent 归档。改名前必须备份 vault（5.1M tar），因为 vault 不在 git、改错无法回滚。交叉引用有三种形态要全覆盖：dsh-sessions/（带斜杠路径）、`dsh-sessions`（反引号独立词）、'提炼自 dsh-sessions'（frontmatter 值不带斜杠）——第一版只处理了前两种，第三种 8 处残留靠二次扫描补齐。wikilink 用 [[笔记名]] 形式而非 [[dsh-sessions/名字]] 所以目录移动不产生断链（若当初用了带路径的 wikilink 改名会全断）。SKILL.md 多 agent 小节的标签描述一度与实现不一致（文档说 qoder/归档、实现已改 archive/归档），靠文档-实现一致性校验发现。
+
 ## Session #2 - 2026-09-28 11:04
 
 **需求**：
