@@ -39,8 +39,34 @@ for (const rule of sharedRules) {
   }
 }
 
+// 防漂移：出票生成器只能有一份实现（位于 FDP_ROOT 仓库）。
+// 2026-09-30 复盘确认「skill 自带副本」与「仓库实现」各自演化是出票亏损的根因，
+// 因此 skill 侧该文件必须是薄壳（只转发），不得再出现票型/闸门等实现逻辑。
+const GENERATOR = join(root, 'skills', 'football-betting', 'scripts', '_generate-two-tickets.mjs');
+const generatorText = await readFile(GENERATOR, 'utf8');
+const generatorLines = generatorText.split(/\r?\n/).length;
+
+// 行数只作粗兜底（薄壳含说明注释约 107 行；一旦被写回实现会到 1000+ 行）
+if (generatorLines > 200) {
+  failed = true;
+  console.error(
+    `[FAIL] ${GENERATOR} 有 ${generatorLines} 行，已不是薄壳。出票生成器的唯一实现必须放在 FDP_ROOT 的 scripts/betting/_generate-two-tickets.mjs，skill 侧只做转发。`,
+  );
+}
+if (!/AUTHORITATIVE_ENTRY/.test(generatorText) || !/scripts\/betting\/_generate-two-tickets\.mjs/.test(generatorText)) {
+  failed = true;
+  console.error(`[FAIL] ${GENERATOR} 未声明权威入口常量 scripts/betting/_generate-two-tickets.mjs。`);
+}
+for (const impl of ['buildHitTicket', 'narrowBucketGate', 'enumerateCovers', 'ticketMetrics']) {
+  if (new RegExp(`function\\s+${impl}\\b`).test(generatorText)) {
+    failed = true;
+    console.error(`[FAIL] ${GENERATOR} 出现了实现函数 ${impl}()，说明薄壳被写回了实现；请改为只转发。`);
+  }
+}
+
 if (failed) {
-  console.error('\n两个 skill 的 RULES_BASELINE.md 不同步。请先更新 football-analysis，再同步 football-betting 的共享副本。');
+  console.error('\n两个 skill 的 RULES_BASELINE.md 不同步，或出票生成器薄壳被写回实现。请先更新 football-analysis，再同步 football-betting 的共享副本。');
   process.exit(1);
 }
 console.log('[OK] football-analysis / football-betting 共享口径同步。');
+console.log('[OK] 出票生成器为薄壳（唯一实现位于 FDP_ROOT 仓库）。');
