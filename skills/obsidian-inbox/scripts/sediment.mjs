@@ -5,7 +5,7 @@
  * 流程：扫描 ~/.dsh/storages/session_projcache 找到时间窗内有活动的会话
  *      → 用 turnOutline（含每轮 prompt/response）拼摘要，不调模型也能跑
  *      → 调 `dsh headless`（挂 no-tools 补丁）精炼成结构化笔记
- *      → 写入 vault 归档区（archiveDir，默认 sessions/）下；同一会话有新增轮次时追加补记。
+ *      → 写入 vault 归档区按来源分层的 sessions/<agent>/ 下；同会话新增轮次追加补记。
  *
  * 用法：
  *   node scripts/sediment.mjs [--date 2026-09-28] [--since-hours 26] [--limit N]
@@ -311,7 +311,7 @@ function rawNote(s, digest) {
 // ---------------------------------------------------------------- 写入
 
 /**
- * 会话归档统一落在知识库**顶层**的 archiveDir（跨领域的原始素材区），
+ * 会话归档落在**顶层** archiveDir 下按来源 agent 分层的子目录（sessions/<agent>/），
  * 不跟着领域目录走：这样领域容器（domainRoots）保持纯领域结构。
  * 会话归属的领域（如 `dawn/pop`、`work/service`）记进 frontmatter 的 domain 字段。
  */
@@ -321,8 +321,10 @@ function writeNote(cfg, s, note, prev, args) {
   const domain = routeDir(cfg, s.cwd, explicitDir);
   let notePath = prev?.notePath && existsSync(vaultAbs(cfg, prev.notePath)) ? prev.notePath : null;
   if (!notePath) {
-    const dir = cfg.archiveDir ? `${normalizeRel(cfg.archiveDir)}/` : '';
-    notePath = normalizeRel(`${dir}${dateStr} ${slugify(note.title)}.md`);
+    // 归档按来源 agent 分层：sessions/<agent>/<日期 标题>.md（--dir 显式指定时跳过）
+    const base = cfg.archiveDir ? normalizeRel(cfg.archiveDir) : '';
+    const agentDir = explicitDir ? '' : `/${s._agent || 'dsh'}`;
+    notePath = normalizeRel(`${base}${agentDir}/${dateStr} ${slugify(note.title)}.md`);
   }
   const absPath = vaultAbs(cfg, notePath);
   const exists = existsSync(absPath);
@@ -388,29 +390,50 @@ const INDEX_NAME = '索引.md';
  * 重建归档区入口页：把 `<archiveDir>/` 下所有归档笔记汇总成一张表。
  * 每次归档后自动重建（也可 `--reindex` 单独跑），是人工维护以外的唯一入口。
  */
+/** 递归收集 .md（排除索引页自身），返回相对 archiveDir 的路径数组。 */
+function walkMd(absDir, relPrefix) {
+  const out = [];
+  let ents;
+  try { ents = readdirSync(absDir, { withFileTypes: true }); } catch { return out; }
+  for (const e of ents) {
+    if (e.isDirectory()) {
+      out.push(...walkMd(join(absDir, e.name), relPrefix ? `${relPrefix}/${e.name}` : e.name));
+    } else if (e.isFile() && e.name.endsWith('.md') && e.name !== INDEX_NAME) {
+      out.push(relPrefix ? `${relPrefix}/${e.name}` : e.name);
+    }
+  }
+  return out;
+}
+
 function buildArchiveIndex(cfg) {
   const relDir = normalizeRel(cfg.archiveDir);
   const absDir = join(cfg.vault, relDir);
   let files;
   try {
-    files = readdirSync(absDir).filter((f) => f.endsWith('.md') && f !== INDEX_NAME);
+    // 归档按来源 agent 分层（sessions/<agent>/），需递归收集子目录；索引页自身在根，排除
+    files = walkMd(absDir, '');
   } catch {
     return null;
   }
   const entries = files.map((f) => {
+    // f 是相对 archiveDir 的路径（dsh/2026-09-28 xxx.md 或根下的 xxx.md）
+    const abs = join(absDir, f);
     let raw = '';
-    try { raw = readFileSync(join(absDir, f), 'utf8'); } catch { /* 读不到就只留文件名 */ }
+    try { raw = readFileSync(abs, 'utf8'); } catch { /* 读不到就只留文件名 */ }
     const { fields } = raw ? parseFrontmatter(raw) : { fields: {} };
     const title = (raw.match(/^#\s+(.+)$/m) || [])[1];
+    const agent = f.includes('/') ? f.split('/')[0] : (String(fields.source ?? '').trim() || 'dsh');
     return {
       date: String(fields.date ?? '').slice(0, 10) || '未知',
       domain: String(fields.domain ?? ''),
-      // 来源 agent（frontmatter source）；旧笔记缺字段时回退 dsh（历史默认）
-      source: String(fields.source ?? '').trim() || 'dsh',
+      // 来源：优先按所在子目录（sessions/<agent>/），根下的按 frontmatter source
+      source: agent,
+      agent,
       unclassified: String(fields.unclassified ?? '') === 'true',
       session: String(fields.session ?? ''),
       distilledInto: String(fields.distilled_into ?? ''),
-      name: f.replace(/\.md$/, ''),
+      name: f.replace(/\.md$/, '').split('/').pop(),   // wikilink 只用笔记名
+      relPath: f.replace(/\.md$/, ''),                  // 相对路径（含子目录）
       title: (title || f.replace(/\.md$/, '')).trim(),
     };
   });
@@ -589,8 +612,8 @@ for (const s of candidates) {
   if (dryRun) {
     const domain = routeDir(cfg, s.cwd, typeof args.dir === 'string' ? args.dir : null);
     const planned = normalizeRel(
-      `${cfg.archiveDir ? `${normalizeRel(cfg.archiveDir)}/` : ''}`
-      + `${fmtTime(s.lastPromptAt, false)} ${slugify(s.title || '未命名')}.md`,
+      `${cfg.archiveDir ? `${normalizeRel(cfg.archiveDir)}` : ''}`
+      + `/${s._agent || 'dsh'}/${fmtTime(s.lastPromptAt, false)} ${slugify(s.title || '未命名')}.md`,
     );
     result.created.push({
       id: s.id, title: s.title, notePath: planned, domain, turns: turnCount,

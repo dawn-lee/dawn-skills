@@ -98,8 +98,9 @@ function cmdNew() {
     routeDir(cfg, typeof args.cwd === 'string' ? args.cwd : process.cwd(), args.dir),
     dirSource,
   );
-  assertDirReady(cfg, dirRel, { create: args.mkdir === true, source: dirSource });
-  // 归档区由 sediment 自动维护，不接受手工新建（避免污染原始素材区）
+  // 归档区（含其子目录 sessions/<agent>/）由 sediment 维护，不接受手工新建。
+  // 必须在 assertDirReady **之前**检查：否则 --dir sessions/<agent> 会先因"目录不存在"
+  // 报新建分类的错，而不是明确的"这是归档区禁写"（分层后更易暴露）
   const archiveRoot = cfg.archiveDir ? normalizeRel(cfg.archiveDir) : '';
   if (archiveRoot && (dirRel === archiveRoot || dirRel.startsWith(`${archiveRoot}/`))) {
     // 容器名从配置取，不写死（换机器/换预设时提示才不会指错地方）
@@ -108,6 +109,7 @@ function cmdNew() {
       : '各领域目录';
     fail(2, `归档区 ${archiveRoot}/ 由 sediment 自动维护，不放手工笔记（补归档用 node scripts/sediment.mjs --session <id>，Linux/macOS 也可 ./run-sediment.sh、Windows 用 run-sediment.cmd）；请写入 ${domainHint}`);
   }
+  assertDirReady(cfg, dirRel, { create: args.mkdir === true, source: dirSource });
   const prefix = args['date-prefix'] === true ? `${todayStr()} ` : '';
   const relPath = normalizeRel([dirRel, `${prefix}${slug}.md`].filter(Boolean).join('/'));
   const absPath = vaultAbs(cfg, relPath);
