@@ -6,9 +6,9 @@
 #
 # 用法：dsh --profile headless --patch <本文件> -
 #
-# ⚠ 换机器必读：本文件后半段的模型配置是**示例**——
-#   provider `volcengine`、密钥环境变量 `VOLCENGINE_API_KEY`、
-#   模型 `deepseek-v4.1-flash` 都只对原作者的机器成立；插件 id（tool-bash、llm-pi-ai…）
+# ⚠ 换机器必读：本文件后半段的模型配置是**本机实际配置**——
+#   provider `xiaomi`、密钥环境变量 `XIAOMI_API_KEY`、
+#   模型 `mimo-v2.6-flash` 只对本机成立（换机器要改 provider/key/model 两处）；插件 id（tool-bash、llm-pi-ai…）
 #   也随 DSH 版本变化。请改成你自己的 provider/key/model，或另存一份后用配置项
 #   `llm.patch` 指向它（sediment 优先用 cfg.llm.patch，找不到才回退到本文件）。
 #   找不到补丁时 sediment 会告警：此时 headless 以默认策略运行，工具是**开启**的。
@@ -76,29 +76,33 @@
   disabled: true
 
 # —— 模型：headless 默认走 deepseek-official（本机没有该 route 的 key）。
-#    这里对齐 web profile 的方舟 coding-plan，key 取 credentials 里的 VOLCENGINE_API_KEY。
+#    这里对齐本机可用的 xiaomi route，key 取 credentials 里的 XIAOMI_API_KEY。
 #    若你换模型，改这里即可（同时更新 agent-default-model）。
 - id: llm-pi-ai
   config:
     providers:
-      volcengine:
-        displayName: 方舟coding-plan
-        apiKeyEnv: VOLCENGINE_API_KEY
-        api: openai-responses
-        baseURL: https://ark.cn-beijing.volces.com/api/coding/v3
+      xiaomi:
+        displayName: xiaomi-mimo
+        apiKeyEnv: XIAOMI_API_KEY
         models:
-          - id: deepseek-v4.1-flash
-            name: deepseek-v4.1-flash
-            contextWindow: 1000000
-            maxTokens: 384000
-          - id: glm-5.3-flash
-            name: glm-5.3-flash
+          - id: mimo-v2.6-flash
+            name: mimo-v2.6-flash
             contextWindow: 1000000
             maxTokens: 128000
+            input:
+              - text
+              - image
+          - id: mimo-v2.6-pro
+            name: mimo-v2.6-pro
+            contextWindow: 1000000
+            maxTokens: 128000
+            input:
+              - text
+              - image
 - id: agent-default-model
   config:
-    provider: volcengine
-    model: deepseek-v4.1-flash
+    provider: xiaomi
+    model: mimo-v2.6-flash
 
 # —— 不落库：沉淀任务自身不需要出现在会话列表里
 - id: session-persistence-jsonl
