@@ -50,6 +50,12 @@ function parseFile(path, sid) {
       if (ts) { createdAt = ts; lastPromptAt = ts; }
       continue;
     }
+    // 模型名不在 session_meta（那里只有 model_provider），而在 turn_context.model
+    if (d.type === 'turn_context') {
+      const p = d.payload ?? {};
+      if (p.model && !model) model = p.model;
+      continue;
+    }
     if (d.type !== 'response_item') continue;
     const p = d.payload ?? {};
     if (p.type !== 'message') continue;
