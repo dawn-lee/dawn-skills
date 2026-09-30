@@ -21,14 +21,14 @@ import { fileURLToPath } from 'node:url';
 import {
   SKILL_DIR, STATE_DIR, loadConfig, routeDir, slugify, buildFrontmatter, atomicWrite,
   appendSection, vaultAbs, fmtTime, parseArgs, normalizeRel, listNoteIndex, sanitizeBodyLinks,
-  parseFrontmatter, acquireLock, findTranscript, resolveDshBin, expandHome, dshProjcacheRoot,
+  parseFrontmatter, acquireLock, resolveDshBin, expandHome,
   zstdAvailable, ZSTD_HINT,
 } from './lib.mjs';
+import { getAdapters, transcriptAdapter } from './adapters/index.mjs';
 
 // 下游提前关管道（如 `| head`）时安静退出，不要抛 EPIPE 栈
 process.stdout.on('error', (err) => { if (err?.code === 'EPIPE') process.exit(0); });
-// DSH 会话投影缓存位置；DSH 装在非默认位置时用 $DSH_HOME 覆盖
-const PROJCACHE_DIR = dshProjcacheRoot();
+// 会话数据源由 cfg.agentAdapter 决定（见 adapters/index.mjs）；常量已抽到 adapter 内
 const STATE_PATH = join(STATE_DIR, 'archived.json');
 const LOG_PATH = join(STATE_DIR, 'sediment.log');
 const WORK_DIR = join(STATE_DIR, 'work');
@@ -128,49 +128,23 @@ function resolveWindow(args) {
 
 // ---------------------------------------------------------------- 会话采集
 
-function normalizeSession(file, j) {
-  const rec = j?.record ?? {};
-  const rows = rec.rows ?? {};
-  const v = (k) => rows[k]?.val;
-  const identity = rec.identity ?? {};
-  const md = v('sessionListMetadata') ?? {};
-  const stats = v('sessionStats') ?? {};
-  const outline = v('turnOutline') ?? {};
-  const turns = Array.isArray(outline.turns) ? outline.turns : [];
-  return {
-    id: basename(file, '.json'),
-    cwd: identity.cwd ?? '',
-    createdAt: identity.createdAt ?? 0,
-    lastPromptAt: md.lastPromptAt ?? identity.createdAt ?? 0,
-    blank: md.blank === true,
-    title: typeof v('title') === 'string' ? v('title') : '',
-    model: v('modelSelection')?.lastUsed?.model ?? '',
-    turns,
-    turnCount: Number(stats.lastTurn) || turns.length,
-  };
-}
-
+/**
+ * 收集时间窗内的会话 —— 由 adapter 层提供（见 adapters/）。
+ * 每个 adapter 产出统一 session 对象（contract.mjs）；归档逻辑零改动。
+ * cfg.agentAdapter 可逗号分隔多个 agent（如 "dsh,qoder"），结果按 lastPromptAt 合并排序。
+ */
 function collectSessions(cfg, win, args) {
-  let files = [];
-  try {
-    files = readdirSync(PROJCACHE_DIR).filter((f) => f.startsWith('session-') && f.endsWith('.json'));
-  } catch {
-    return [];
-  }
-  const only = typeof args.session === 'string'
-    ? new Set(String(args.session).split(',').map((s) => s.trim()).filter(Boolean))
-    : null;
   const out = [];
-  for (const f of files) {
-    let j;
-    try { j = JSON.parse(readFileSync(join(PROJCACHE_DIR, f), 'utf8')); } catch { continue; }
-    const s = normalizeSession(f, j);
-    if (only && !only.has(s.id)) continue;
-    if (cfg.excludeCwdPrefixes.some((p) => s.cwd.startsWith(p))) continue;
-    if (!only && (s.lastPromptAt < win.from || s.lastPromptAt > win.to)) continue;
-    out.push(s);
+  for (const a of getAdapters(cfg)) {
+    try {
+      const list = a.mod.listSessions(cfg, win, args);
+      if (Array.isArray(list)) out.push(...list.map((s) => ({ ...s, _agent: a.id })));
+    } catch (err) {
+      // 单个 adapter 失败不阻断整体（该 agent 可能没装 / 目录不可读）
+      log(`跳过 adapter ${a.id}：${String(err?.message ?? err).slice(0, 200)}`);
+    }
   }
-  out.sort((a, b) => a.lastPromptAt - b.lastPromptAt);
+  out.sort((x, y) => x.lastPromptAt - y.lastPromptAt);
   return out;
 }
 
@@ -207,8 +181,9 @@ function clipSmart(text, proseMax) {
 
 let zstdWarned = false;
 
-function transcriptDigest(sid, budget = 30000) {
-  const tr = findTranscript(sid);
+function transcriptDigest(cfg, sid, budget = 30000) {
+  const ad = transcriptAdapter(cfg);
+  const tr = ad && typeof ad.mod.findTranscriptPath === 'function' ? ad.mod.findTranscriptPath(sid) : null;
   if (!tr) return null;
   if (!zstdAvailable()) {
     if (!zstdWarned) { zstdWarned = true; log(`提示：${ZSTD_HINT}`); }
@@ -328,7 +303,7 @@ function rawNote(s, digest) {
   return {
     skip: false,
     title: s.title || `会话归档 ${fmtTime(s.lastPromptAt, false)}`,
-    tags: ['dsh/归档'],
+    tags: [`${s._agent || 'dsh'}/归档`],
     body: `## 会话摘要（原始）\n\n${digest}`,
   };
 }
@@ -361,7 +336,7 @@ function writeNote(cfg, s, note, prev, args) {
   ].join('\n');
   const fm = buildFrontmatter({
     type: 'session',
-    source: 'dsh',
+    source: s._agent || 'dsh',
     session: s.id,
     domain: domain || undefined,
     unclassified: unclassified || undefined,
@@ -370,7 +345,7 @@ function writeNote(cfg, s, note, prev, args) {
     model: s.model || undefined,
     date: dateStr,
     updated: fmtTime(Date.now()),
-    tags: ['dsh/归档', ...(unclassified ? ['dsh/待归类'] : []), ...note.tags.filter((t) => t !== 'dsh/归档')],
+    tags: [`${s._agent || 'dsh'}/归档`, ...(unclassified ? [`${s._agent || 'dsh'}/待归类`] : []), ...note.tags.filter((t) => !/\/(归档|待归类)$/.test(t))],
   });
 
   if (exists && !args.force) {
@@ -570,7 +545,7 @@ for (const s of candidates) {
   const outlineChars = substanceOf(s);
   let tr = null;
   if (!s.turns?.length || outlineChars < minChars) {
-    tr = transcriptDigest(s.id);
+    tr = transcriptDigest(cfg, s.id);
   }
   const chars = tr ? Math.max(outlineChars, tr.chars) : outlineChars;
   if (chars < minChars) {
@@ -586,7 +561,7 @@ for (const s of candidates) {
     // 围栏不成对 = turnOutline 预览在代码块中间被切断 → 回退原始 transcript
     const fences = (String(digest).match(/```/g) || []).length;
     if (fences % 2 === 1) {
-      const tr2 = tr || transcriptDigest(s.id);
+      const tr2 = tr || transcriptDigest(cfg, s.id);
       if (tr2 && tr2.chars > outlineChars) { tr = tr2; useTranscript = true; }
     }
   }

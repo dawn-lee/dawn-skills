@@ -251,9 +251,39 @@ ask_user_question("这条笔记放哪？",
 
 ## C. 每日自动归档（兜底，不需要手动触发）
 
+### 多 agent 归档（agentAdapter）
+
+**不只 DSH**：写/查通道（`note.mjs`）本来就与 agent 无关；归档通道通过 `adapters/` 层
+把各家 agent 的会话格式映射成**统一 session 对象**，归档逻辑零改动。配置项 `agentAdapter`：
+
+| adapter | 数据源（本机实测） | 状态 |
+|---|---|---|
+| `dsh`（默认） | `$DSH_HOME`（`~/.dsh`）：投影 `storages/session_projcache/` + transcript 兜底 | ✅ |
+| `qoder` | `~/.qoder-cn/projects/<cwd编码>/<uuid>.jsonl`（type:user/assistant + content blocks） | ✅ |
+| `claude` | `~/.claude/projects/<cwd编码>/<uuid>.jsonl`；无 jsonl 时回退 `~/.claude/history.jsonl` | ✅ |
+| `codex` | `~/.codex/archived_sessions/rollout-*.jsonl`（session_meta + response_item，跳过 role=developer） | ✅ |
+| `cursor` | `~/.config/Cursor/User/workspaceStorage/*/state.vscdb`（SQLite，`composerHeaders` 表） | ⏳ 暂未实现 |
+| `workbuddy` | `~/.workbuddy/…`（Electron 缓存/SWR，未定位到独立对话流） | ⏳ 暂未实现 |
+
+```bash
+# 单个 agent
+#   "agentAdapter": "qoder"
+# 多 agent 合并（按 lastPromptAt 排序；--session 过滤对所有 agent 生效）
+#   "agentAdapter": "dsh,qoder,claude,codex"
+```
+
+- **归档产物**统一落 `dsh-sessions/`，frontmatter 里 `source` 与 `tags` 标明来源 agent
+  （如 `source: qoder`、`qoder/归档`），`domain` 仍由会话的 `cwd` 路由判定；
+- 各家目录可用环境变量覆盖：`DSH_HOME` / `QODER_HOME` / `CLAUDE_HOME` / `CODEX_HOME`；
+- **未登记的 adapter 会报错**（列出可用项）——接入新 agent 只需在 `adapters/` 加一个文件
+  + 在 `adapters/index.mjs` 登记，实现 `listSessions(cfg, win, args)` 返回统一对象即可；
+- 已知噪音（`<command-message>`、`<recommended_plugins>`、slash-command 等）由
+  `contract.isNoisePrompt` 统一过滤，不产生空轮次。
+
+
 `scripts/sediment.mjs` 每天 23:00 由 `install.mjs` 注册的调度触发（linux 见 `~/.config/systemd/user/dsh-sediment.timer`，macOS 见 `~/Library/LaunchAgents/com.dsh.obsidian-inbox.plist`，Windows 见计划任务 `obsidian-inbox-sediment`；时间用 `install.mjs --time HH:MM` 改）：
 
-1. 扫描 `~/.dsh/storages/session_projcache/sessions/*.json`，取时间窗内有活动的会话；
+1. 按 `cfg.agentAdapter`（默认 `dsh`）从对应 agent 的会话存储取时间窗内的会话（见下「多 agent 归档」）；
 2. 拼摘要：优先用 `turnOutline`（每轮问答预览）；**老会话的投影可能为空或预览截断得极小**，此时自动回退解压 `~/.dsh/sessions/<slug>/<sid>/session.jsonl.zstd`，抽 `user/message` + `assistant/message` 的 text（跳过 reasoning）重建摘要，避免老会话被误判成"没内容"而漏归档。**代码块必须整段保留**：transcript 摘要里含代码围栏的段落不按字数截断（只裁围栏外的散文）；turnOutline 摘要若围栏不成对（=在代码中间被切），自动回退读原始 transcript；LLM 提示词明确要求代码/命令/SQL **逐字完整复制**，禁止概括与截断（踩过坑：SQL 曾因截断从知识库丢失）。
 3. 拼成摘要喂给 `dsh headless` 精炼（挂 [patch/headless-notes-only.yml](patch/headless-notes-only.yml)，**禁掉全部工具**，防止会话里夹带的外部内容触发注入）；
 4. 有价值就写成 `dsh-sessions/YYYY-MM-DD <标题>.md`（知识库顶层归档区），领域记在 frontmatter 的 `domain`（如 `work/arch/app`）；模型判断没价值则输出 `SKIP` 跳过；

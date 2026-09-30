@@ -36,9 +36,19 @@ const skipScrub = args.includes('--skip-scrub-check');
 const REPO_ROOT = resolve(SKILL_DIR, '..', '..');
 const results = [];
 
+const pending = [];
+
+/** 支持同步与 async fn：async 时收集 Promise，末尾统一 await（避免未处理拒绝）。 */
 function check(id, title, fn) {
   try {
     const detail = fn();
+    if (detail && typeof detail.then === 'function') {
+      pending.push(Promise.resolve(detail).then(
+        (v) => results.push({ id, title, ok: true, detail: v ?? '' }),
+        (e) => results.push({ id, title, ok: false, detail: String(e?.message ?? e) }),
+      ));
+      return;
+    }
     results.push({ id, title, ok: true, detail: detail ?? '' });
   } catch (err) {
     results.push({ id, title, ok: false, detail: String(err?.message ?? err) });
@@ -172,6 +182,48 @@ check('P3-2', 'XML 转义后无裸 & / < / > （路径含 & 的机器上不会�
   assert((xml.match(/<Task/g) || []).length === 1, 'Task 根元素缺失');
 });
 
+// ------------------------------------------------------------ P4 adapter 契约
+
+check('P4-1', '四个 adapter 都产出契约字段（id/cwd/turns）且统一形状', async () => {
+  const { getAdapters } = await import(join(SKILL_DIR, 'scripts', 'adapters', 'index.mjs'));
+  const { loadConfig } = await import(join(SKILL_DIR, 'scripts', 'lib.mjs'));
+  const cfg = loadConfig();
+  const win = { from: Date.now() - 365 * 86400 * 1000, to: Date.now() + 3600 * 1000 };
+  const seen = [];
+  for (const id of ['dsh', 'qoder', 'claude', 'codex']) {
+    cfg.agentAdapter = id;
+    const a = getAdapters(cfg).find((x) => x.id === id);
+    if (!a) throw new Error(`adapter ${id} 未登记`);
+    const list = a.mod.listSessions(cfg, win, {});
+    if (!Array.isArray(list)) throw new Error(`${id}.listSessions 未返回数组`);
+    for (const s of list) {
+      if (typeof s.id !== 'string' || !s.id) throw new Error(`${id} 会话缺 id`);
+      if (!Array.isArray(s.turns)) throw new Error(`${id}/${s.id} turns 非数组`);
+      if (typeof s.lastPromptAt !== 'number') throw new Error(`${id}/${s.id} lastPromptAt 非数字`);
+      for (const t of s.turns) {
+        if (typeof t.prompt !== 'string') throw new Error(`${id}/${s.id} turn.prompt 非字符串`);
+      }
+    }
+    if (list.length) seen.push(`${id}:${list.length}`);
+  }
+  if (!seen.length) throw new Error('所有 adapter 都返回 0 会话（本机应至少有 dsh 数据）');
+  return `样本数 ${seen.join(' ')}`;
+});
+
+check('P4-2', 'agentAdapter 多值与未知值处理（逗号分隔 / 未登记报错）', async () => {
+  const { resolveAgents } = await import(join(SKILL_DIR, 'scripts', 'adapters', 'index.mjs'));
+  const a = resolveAgents({ agentAdapter: 'dsh,qoder' });
+  assert(a.length === 2 && a[0] === 'dsh', `多值解析错: ${a}`);
+  const b = resolveAgents({});
+  assert(b.length === 1 && b[0] === 'dsh', `缺省应为 dsh: ${b}`);
+  let threw = false;
+  try { resolveAgents({ agentAdapter: 'nope' }); } catch { threw = true; }
+  assert(threw, '未登记 agent 应报错');
+  let threw2 = false;
+  try { resolveAgents({ agentAdapter: 'dsh,nope' }); } catch { threw2 = true; }
+  assert(threw2, '混合未知值应报错');
+});
+
 // ------------------------------------------------------------ L1 分发红线
 
 /**
@@ -303,7 +355,9 @@ check('L2-2', 'run-sediment.cmd 为 CRLF 行尾且纯 ASCII（GBK 代码页下�
 });
 
 check('L2-3', '四个入口/脚本都能被语法解析', () => {
-  const nodes = ['note.mjs', 'sediment.mjs', 'init.mjs', 'install.mjs', 'selftest.mjs', 'lib.mjs'];
+  const nodes = ['note.mjs', 'sediment.mjs', 'init.mjs', 'install.mjs', 'selftest.mjs', 'lib.mjs',
+    'adapters/index.mjs', 'adapters/contract.mjs', 'adapters/dsh.mjs', 'adapters/qoder.mjs',
+    'adapters/claude.mjs', 'adapters/codex.mjs'];
   for (const f of nodes) {
     const r = spawnSync(process.execPath, ['--check', join(SKILL_DIR, 'scripts', f)], { encoding: 'utf8' });
     assert(r.status === 0, `${f} 语法错误：${String(r.stderr).split('\n')[0]}`);
@@ -314,6 +368,9 @@ check('L2-3', '四个入口/脚本都能被语法解析', () => {
 });
 
 // ------------------------------------------------------------ 输出
+
+// 让 async check 的结果落定后再统计（顺序保持：它们是最后注册的）
+if (pending.length) await Promise.all(pending);
 
 const failed = results.filter((r) => !r.ok);
 if (json) {

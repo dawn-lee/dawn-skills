@@ -146,6 +146,8 @@ export function loadConfig() {
   cfg.excludeCwdPrefixes = (cfg.excludeCwdPrefixes || [])
     .map((p) => resolve(expandVars(String(p))).replace(/\\/g, '/'));
   cfg.domainRoots = (cfg.domainRoots || []).map((r) => normalizeRel(r)).filter(Boolean);
+  // 会话数据源：默认 dsh；可逗号分隔多个 agent（如 "dsh,qoder,codex"）
+  cfg.agentAdapter = (typeof cfg.agentAdapter === 'string' && cfg.agentAdapter.trim()) ? cfg.agentAdapter.trim() : 'dsh';
   // 严格容器清单完全由配置决定；缺省为空（"第二级必须对应真实目录"是可选约束）
   cfg.strictCatalog = Array.isArray(cfg.strictCatalog) ? cfg.strictCatalog.map(normalizeRel) : [];
   cfg.domainNotes = cfg.domainNotes || {};
