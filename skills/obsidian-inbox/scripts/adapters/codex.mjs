@@ -32,6 +32,30 @@ function timeFromName(fname) {
   return Date.parse(`${Y}-${Mo}-${D}T${H}:${Mi}:${S}Z`);
 }
 
+/** 标题是否是内部引用/无意义值（人读不了，该被 thread_name 覆盖）。 */
+function isBadTitle(t) {
+  if (!t) return true;
+  const s = String(t).trim();
+  if (/^(codex|vscode|chat):\/\//i.test(s)) return true;                       // codex://threads/…
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s)) return true;  // 纯 uuid
+  if (s.length < 3) return true;
+  return false;
+}
+
+/** 递归收集目录下所有 rollout .jsonl（不限深度，覆盖 sessions/YYYY/MM/DD 任意层级）。 */
+function collectRollouts(dir, depth = 0) {
+  if (depth > 16) return [];   // 防环/异常深
+  let ents;
+  try { ents = readdirSync(dir, { withFileTypes: true }); } catch { return []; }
+  const out = [];
+  for (const e of ents) {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) out.push(...collectRollouts(p, depth + 1));
+    else if (e.isFile() && e.name.endsWith('.jsonl')) out.push(p);
+  }
+  return out;
+}
+
 function parseFile(path, sid) {
   let raw;
   try { raw = readFileSync(path, 'utf8'); } catch { return null; }
@@ -86,26 +110,9 @@ export function listSessions(cfg, win, args = {}) {
   const exclude = cfg.excludeCwdPrefixes || [];
   const out = [];
 
-  // 1) archived_sessions
+  // 1) archived_sessions + sessions/YYYY/MM/DD（真实层级可深达 4 层，必须真递归）
   for (const root of [sessionRoot(), liveRoot()]) {
-    let files = [];
-    try {
-      const ents = readdirSync(root, { withFileTypes: true });
-      if (ents.some((e) => e.isDirectory())) {
-        // sessions/2026/09/ 结构：递归一层
-        for (const e of ents) {
-          if (!e.isDirectory()) continue;
-          try {
-            for (const e2 of readdirSync(join(root, e.name), { withFileTypes: true })) {
-              if (e2.isDirectory()) continue;
-              if (e2.name.endsWith('.jsonl')) files.push(join(root, e.name, e2.name));
-            }
-          } catch { /* 忽略 */ }
-        }
-      } else {
-        files = ents.filter((e) => e.isFile() && e.name.endsWith('.jsonl')).map((e) => join(root, e.name));
-      }
-    } catch { continue; }
+    const files = collectRollouts(root);
     for (const p of files) {
       const fname = p.split('/').pop();
       const sid = fname.replace(/\.jsonl$/, '');
@@ -132,7 +139,9 @@ export function listSessions(cfg, win, args = {}) {
       }
       for (const s of out) {
         const meta = byId.get(s.id);
-        if (meta?.thread_name && !s.title) s.title = meta.thread_name;
+        const tn = meta?.thread_name;
+        // title 若是 codex://threads/… 这类内部引用（人读不了），视为无效，用 thread_name 覆盖
+        if (tn && (isBadTitle(s.title) || !s.title)) s.title = cleanTitle(tn);
       }
     }
   } catch { /* 索引缺失不影响 */ }

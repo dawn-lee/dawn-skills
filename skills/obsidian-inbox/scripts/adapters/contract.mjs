@@ -58,6 +58,7 @@ const NOISE_PATTERNS = [
   /^#\s*Files? pasted by the user/, /^#\s*Files? pasted by/,
   /^\/model$/, /^\/clear$/, /^\/compact$/,          // Claude 斜杠命令
   /^<system-reminder>/, /^Caveat:\s*The messages below/,
+  /^(codex|vscode|chat):\/\//i,                    // Codex 内部 thread 引用，不是人话 prompt
 ];
 export function isNoisePrompt(text) {
   if (!text) return true;
