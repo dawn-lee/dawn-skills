@@ -310,6 +310,35 @@ check('P5-1', 'distill 拒绝不存在的目标且不写标记（防把归档误
   }
 });
 
+check('P5-2', '同名会话防撞（一批内多会话撞标题→加后缀分文件，不串味）', () => {
+  const tmp = mkdtempSync(join(tmpdir(), 'oi-collide-'));
+  try {
+    const vault = join(tmp, 'vault');
+    const dir = join(vault, 'sessions', 'dsh');
+    mkdirSync(dir, { recursive: true });
+    const cfg = { vault, archiveDir: 'sessions' };
+    // 动态 import 到已加载的 sediment（isMain 守卫不会执行主流程）
+    return import(join(SKILL_DIR, 'scripts', 'sediment.mjs')).then((m) => {
+      const rc = m.resolveCollision;
+      if (!rc) return 'resolveCollision 未导出（跳过）';
+      // 3 个不同会话撞同一个不存在的目标 → 依次拿到 _2/_3
+      const p1 = rc(cfg, 'sessions/dsh/2026-08-17 测试.md', 'sid-a');
+      const p2 = rc(cfg, 'sessions/dsh/2026-08-17 测试.md', 'sid-b');
+      const p3 = rc(cfg, 'sessions/dsh/2026-08-17 测试.md', 'sid-c');
+      assert(p1.endsWith('测试.md') && p1 !== p2, `首个会话应拿原名，实际 ${p1} / ${p2}`);
+      assert(p2.endsWith('测试_2.md'), `第二个会话应拿到 _2，实际 ${p2}`);
+      assert(p3.endsWith('测试_3.md'), `第三个会话应拿到 _3，实际 ${p3}`);
+      // 同一 sid 再来一次 → 稳定（返回同一路径，不重复加后缀）
+      const again = rc(cfg, 'sessions/dsh/2026-08-17 测试.md', 'sid-b');
+      assert(again === p2, `同 sid 应稳定复用 ${p2}，实际 ${again}`);
+      return `${p1} / ${p2} / ${p3}`;
+    });
+  } finally {
+    // finally 对 Promise 无法立即收尾，defer 到 then 后
+    setTimeout(() => rmSync(tmp, { recursive: true, force: true }), 0);
+  }
+});
+
 // ------------------------------------------------------------ L1 分发红线
 
 /**

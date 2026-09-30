@@ -316,6 +316,54 @@ function rawNote(s, digest) {
  * 会话归属的领域（如 `dawn/pop`、`work/service`）记进 frontmatter 的 domain 字段。
  */
 /**
+ * 本次运行内已分配的归档路径（会话 id → 已用 notePath）。
+ * 防撞除查磁盘外还要查这张表：同一批里多个会话撞同名时，第一个会话的目标文件
+ * 往往还没落盘（dry-run 或真实写入的前几步），只看磁盘会全部判"无冲突"。
+ */
+const assignedThisRun = new Map();
+
+/**
+ * 归档笔记文件名冲突消解：目标文件已存在或已被本批其他会话占用且**不属于本会话**
+ * 时，加序号后缀分文件（如 `…标题.md` → `…标题_2.md`），避免同标题的多个会话
+ * 串进同一篇。属于本会话则返回原路径（正常补记）。最多探 99 次。
+ */
+// 导出供 selftest 的防撞测试调用（isMain 守卫下 import 不执行主流程）
+export function resolveCollision(cfg, notePath, sid) {
+  const abs = vaultAbs(cfg, notePath);
+  const onDisk = existsSync(abs);
+  const holder = assignedThisRun.get(notePath);
+  // 目标没人占（磁盘没有、本批也没分配给别的会话）→ 直接用
+  if (!onDisk && holder === undefined) { assignedThisRun.set(notePath, String(sid)); return notePath; }
+  // 已有内容且是本会话 → 补记
+  if (onDisk) {
+    try {
+      const { fields } = parseFrontmatter(readFileSync(abs, 'utf8'));
+      if (String(fields.session ?? '') === String(sid)) return notePath;
+    } catch { /* 读不到就当冲突，继续探后缀 */ }
+  }
+  if (holder !== undefined && holder === String(sid)) return notePath;
+  const dir = notePath.slice(0, notePath.lastIndexOf('/') + 1);
+  const stem = notePath.slice(dir.length, -'.md'.length);
+  for (let i = 2; i <= 99; i++) {
+    const cand = normalizeRel(`${dir}${stem}_${i}.md`);
+    const absC = vaultAbs(cfg, cand);
+    const holderC = assignedThisRun.get(cand);
+    if (!existsSync(absC) && holderC === undefined) {
+      assignedThisRun.set(cand, String(sid));
+      return cand;
+    }
+    if (existsSync(absC)) {
+      try {
+        const { fields: f2 } = parseFrontmatter(readFileSync(absC, 'utf8'));
+        if (String(f2.session ?? '') === String(sid)) return cand;
+      } catch { /* 继续探 */ }
+    }
+    if (holderC === String(sid)) return cand;
+  }
+  return notePath;   // 极端情况放弃后缀，交由上层 append
+}
+
+/**
  * 状态里记的 notePath 失效时（归档区改名 / 平铺改分层 / 手动重命名），按会话 id 在
  * 归档区递归找回已归档笔记——归档笔记 frontmatter 带 `session: <id>`。找不到返回 null。
  * 动机：只靠"重算文件名恰好撞上现有文件"判定是否重复，改名或手动重命名后会重复建档。
@@ -346,6 +394,9 @@ function writeNote(cfg, s, note, prev, args) {
     const base = cfg.archiveDir ? normalizeRel(cfg.archiveDir) : '';
     const agentDir = explicitDir ? '' : `/${s._agent || 'dsh'}`;
     notePath = normalizeRel(`${base}${agentDir}/${dateStr} ${slugify(note.title)}.md`);
+    // 标题撞车防串味：同日期同标题的**另一个**会话已占了这个文件（如 3 个「测试」会话、
+    // 同主题的多个 codex 碎片）时，直接落盘会让多个会话串进同一篇。追加序号分文件。
+    notePath = resolveCollision(cfg, notePath, s.id);
   }
   const absPath = vaultAbs(cfg, notePath);
   const exists = existsSync(absPath);
@@ -632,12 +683,14 @@ for (const s of candidates) {
 
   if (dryRun) {
     const domain = routeDir(cfg, s.cwd, typeof args.dir === 'string' ? args.dir : null);
+    // 与 writeNote 同一套落盘路径（含撞车加后缀），否则预览与实际写入不一致
     const planned = normalizeRel(
       `${cfg.archiveDir ? `${normalizeRel(cfg.archiveDir)}` : ''}`
       + `/${s._agent || 'dsh'}/${fmtTime(s.lastPromptAt, false)} ${slugify(s.title || '未命名')}.md`,
     );
+    const plannedFinal = resolveCollision(cfg, planned, s.id);
     result.created.push({
-      id: s.id, title: s.title, notePath: planned, domain, turns: turnCount,
+      id: s.id, title: s.title, notePath: plannedFinal, domain, turns: turnCount,
       digestChars: digest.length, preview: digest.slice(0, 160),
     });
     continue;
