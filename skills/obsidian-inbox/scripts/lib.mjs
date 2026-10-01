@@ -210,8 +210,8 @@ export function routeDir(cfg, cwd, explicitDir) {
   if (explicitDir && explicitDir !== true) return toVaultRel(cfg, explicitDir);
   // 统一 `/` 分隔再匹配：Windows 的 cwd 可能是 `C:\x`，配置里的 `${HOME}` 已归一为 `/`
   const c = cwd ? resolve(expandVars(String(cwd))).replace(/\\/g, '/') : '';
-  // Windows 路径大小写不敏感：各家 agent 记的盘符大小写不一致（WorkBuddy 写 `小写盘符的同一路径`，
-  // 配置里写的是 `大写盘符的同一路径`），不忽略大小写就会整体掉到 defaultDir（踩过）。
+  // Windows 路径大小写不敏感：各家 agent 记的盘符大小写不一致（同一目录可能写成小写盘符，
+  // 而配置里是大写），不忽略大小写就会整体掉到 defaultDir（踩过）。
   const flags = process.platform === 'win32' ? 'i' : '';
   for (const r of cfg.routes) {
     let re;

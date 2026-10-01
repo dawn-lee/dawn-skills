@@ -89,7 +89,7 @@ npx skills add https://github.com/dawn-lee/dawn-skills --skill football-analysis
 npx skills add https://github.com/dawn-lee/dawn-skills --skill football-betting
 ```
 
-- 需要配置 `FDP_ROOT` 指向足球数据平台仓库（默认开发机路径 `<FDP_ROOT>`），否则相关脚本无法运行；未设置时技能会先向你确认路径，不会臆测。
+- 需要配置 `FDP_ROOT` 指向足球数据平台仓库（开发机兜底 `<本机 FDP 仓库路径>`），否则相关脚本无法运行；未设置时技能会先向你确认路径，不会臆测。
 - 数据侧硬依赖：MySQL + Redis、`pnpm prisma generate` 可跑通、且已导出标准赛前输入。首次使用或数据结构变化时按技能内 `reference/pipeline-integration.md` 跑就绪度审计。
 - **投注方案、盈亏与 CLV 只写 `FDP_ROOT/memory` 与 `FDP_ROOT/data`**，不写进本仓库。
 

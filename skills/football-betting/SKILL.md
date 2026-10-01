@@ -19,7 +19,7 @@ metadata:
 ### 依赖与路径
 
 - 本 skill 依赖 `football-analysis`；安装时必须同时安装，详见 `DEPENDENCIES.md`。
-- `FDP_ROOT` 解析顺序：① 环境变量 `FDP_ROOT`；② 用户本次会话指定；③ 开发机默认 `<FDP_ROOT>`。
+- `FDP_ROOT` 解析顺序：① 环境变量 `FDP_ROOT`；② 用户本次会话指定；③ 开发机兜底 `<本机 FDP 仓库路径>`。
 - 若解析出的路径不存在，先向用户确认，不得臆测路径。
 
 ## 1. 核心纪律

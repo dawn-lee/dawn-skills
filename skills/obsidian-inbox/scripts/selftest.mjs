@@ -167,7 +167,7 @@ check('P2-3', 'frontmatter 解析/生成往返幂等（反斜杠不翻倍，dist
   const raw = [
     '---',
     'type: session',
-    'cwd: "E:\\\\Project\\\\dawn\\\\football-data-platform"',
+    'cwd: "D:\\\\work\\\\proj"',
     'updated: "2026-09-30 20:12"',
     "title: '含 '' 单引号'",
     'tags:',
@@ -179,14 +179,14 @@ check('P2-3', 'frontmatter 解析/生成往返幂等（反斜杠不翻倍，dist
     '',
   ].join('\n');
   const first = parseFrontmatter(raw);
-  assert(first.fields.cwd === '<FDP_ROOT>',
+  assert(first.fields.cwd === 'D:\\work\\proj',
     `cwd 未反转义：${JSON.stringify(first.fields.cwd)}`);
   assert(first.fields.title === "含 ' 单引号", `单引号未按 YAML 规则还原：${JSON.stringify(first.fields.title)}`);
   const rebuilt = `${buildFrontmatter(first.fields)}\n\n${first.body}`;
   const second = parseFrontmatter(rebuilt);
   assert(JSON.stringify(second.fields) === JSON.stringify(first.fields),
     `往返后字段变化：${JSON.stringify(second.fields)}`);
-  assert(rebuilt.includes('cwd: "E:\\\\Project\\\\dawn\\\\football-data-platform"'),
+  assert(rebuilt.includes('cwd: "D:\\\\work\\\\proj"'),
     `重新生成时转义层数不对：${rebuilt.split('\n').find((l) => l.startsWith('cwd:'))}`);
 });
 

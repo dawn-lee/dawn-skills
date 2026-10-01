@@ -3,9 +3,9 @@
  * 薄壳（pass-through）—— 这里不是实现，只是转发到唯一权威入口。
  *
  * 为什么是薄壳：同名脚本曾在「本 skill 自带副本」与「FDP_ROOT 仓库实现」两份之间各自演化，
- * 2026-09-30 出票亏损的复盘确认根因就是这种漂移（副本落后/超前、照哪份跑就会得到不同票型，
- * 而票2 那次差的正是 负收益 vs 正收益那种量级）。为彻底消除双份实现，本文件改为
- * 只做参数转发：实现永远只有一份，位于 FDP_ROOT 仓库内。
+ * 2026-09-30 的出票复盘确认根因就是这种漂移（副本落后/超前，照哪份跑就会得到不同票型，
+ * 两份结论方向相反）。为彻底消除双份实现，本文件改为只做参数转发：实现永远只有一份，位于
+ * FDP_ROOT 仓库内。
  *
  * 权威入口（唯一实现）：
  *   <FDP_ROOT>/scripts/betting/_generate-two-tickets.mjs
@@ -13,7 +13,8 @@
  * FDP_ROOT 解析顺序（与 SKILL.md 一致）：
  *   1) 环境变量 FDP_ROOT
  *   2) 从当前工作目录逐级向上查找 <dir>/scripts/betting/_generate-two-tickets.mjs
- *   3) 开发机默认路径（与 SKILL.md 记录一致）
+ *   3) 开发机兜底：环境变量 FDP_ROOT_DEV_DEFAULT，或与本仓库同级的 football-data-platform
+ *      （源码里不写死任何绝对路径）
  * 找不到时明确报错并给出设置方法，绝不臆测路径、也绝不退回本地旧实现。
  *
  * 用法（与权威入口完全一致，参数原样透传）：
@@ -24,12 +25,26 @@
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import * as path from 'node:path';
 
 /** 权威入口相对 FDP_ROOT 的路径（源码仓库侧脚本 check-rules-baseline-sync.mjs 依赖此常量做防漂移校验） */
 export const AUTHORITATIVE_ENTRY = 'scripts/betting/_generate-two-tickets.mjs';
-/** 开发机默认 FDP_ROOT（与 SKILL.md 的解析顺序注记一致；仅作最后兜底，不做硬编码优先） */
-const DEV_DEFAULT_FDP_ROOT = '<FDP_ROOT>';
+
+/**
+ * 开发机兜底 FDP_ROOT —— **源码里不写死任何绝对路径**（只作最后兜底，不做硬编码优先）。
+ * 顺序：环境变量 FDP_ROOT_DEV_DEFAULT → 与本仓库同级的 football-data-platform。
+ * 本文件位于 <仓库根>/skills/football-betting/scripts/，故仓库根 = 上三级目录。
+ * 推断不到返回 ''，交由调用方明确报错（绝不退回本地旧实现）。
+ */
+function devDefaultFdpRoot() {
+  const fromEnv = String(process.env.FDP_ROOT_DEV_DEFAULT ?? '').trim();
+  if (fromEnv && existsSync(path.join(fromEnv, AUTHORITATIVE_ENTRY))) return fromEnv;
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const repoRoot = path.resolve(here, '..', '..', '..');
+  const guess = path.join(path.dirname(repoRoot), 'football-data-platform');
+  return existsSync(path.join(guess, AUTHORITATIVE_ENTRY)) ? guess : '';
+}
 
 function walkUpForEntry(startDir) {
   let dir = path.resolve(startDir);
@@ -56,8 +71,12 @@ function resolveAuthoritativeEntry() {
   const fromCwd = walkUpForEntry(process.cwd());
   if (fromCwd) return { ...fromCwd, via: 'cwd 向上查找' };
 
-  const target = path.join(DEV_DEFAULT_FDP_ROOT, AUTHORITATIVE_ENTRY);
-  if (existsSync(target)) return { root: DEV_DEFAULT_FDP_ROOT, target, via: '开发机默认路径' };
+  const devRoot = devDefaultFdpRoot();
+  if (devRoot) {
+    const target = path.join(devRoot, AUTHORITATIVE_ENTRY);
+    if (existsSync(target)) return { root: devRoot, target, via: '开发机兜底（同级仓库 / FDP_ROOT_DEV_DEFAULT）' };
+    tried.push(`开发机兜底=${devRoot}`);
+  }
 
   return { target: null, tried };
 }
@@ -81,7 +100,7 @@ if (!resolved.target) {
       `期望路径：<FDP_ROOT>/${AUTHORITATIVE_ENTRY}`,
       `已尝试：${resolved.tried.join(' | ')}`,
       '请设置环境变量 FDP_ROOT 指向足球数据平台仓库后重试，例如：',
-      '  PowerShell:  $env:FDP_ROOT="<FDP_ROOT>"',
+      '  PowerShell:  $env:FDP_ROOT="<FDP 仓库根>"',
       '  bash:        export FDP_ROOT=/path/to/football-data-platform',
     ].join('\n'),
   );
