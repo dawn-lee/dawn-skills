@@ -407,7 +407,19 @@ check('P5-3', 'recover 按来源 agent 选 transcript reader，且围栏块抽�
     const blocks = codeBlocksFromText(`前言\n\`\`\`bash\necho hi\n\`\`\`\n后记\n\`\`\`python\n${block}\n\`\`\``, 20);
     assert(blocks.length === 1, `≥20 字的块应只抽到 1 个，实得 ${blocks.length}`);
     assert(blocks[0] === block, '代码块内容必须逐字保留（不能被 trim 或改写）');
-    return 'reader 选择 + 两种格式抽取 + 围栏块去短 均正常';
+
+    // 工具调用参数/输出：默认不参与候选，--from-tools 时才纳入（含整段工具文本）
+    const toolTexts = transcriptReaderFor('workbuddy').readToolTexts(wb);
+    assert(toolTexts.length === 0, `workbuddy 无工具记录时应返回空数组，实得 ${toolTexts.length}`);
+    const cx2 = join(dir, 'cx2.jsonl');
+    const toolArg = `ls -la\n${'y'.repeat(30)}`;
+    writeFileSync(cx2, [
+      JSON.stringify({ type: 'response_item', timestamp: '2026-07-07T12:00:00Z', payload: { type: 'message', role: 'user', content: [{ type: 'input_text', text: '问题' }] } }),
+      JSON.stringify({ type: 'response_item', timestamp: '2026-07-07T12:00:01Z', payload: { type: 'function_call', name: 'shell_command', arguments: JSON.stringify({ command: toolArg }), call_id: 'c1' } }),
+    ].join('\n') + '\n', 'utf8');
+    const cxTools = transcriptReaderFor('codex').readToolTexts(cx2);
+    assert(cxTools.length === 1 && cxTools[0].includes('y'.repeat(30)), `codex readToolTexts 异常：${JSON.stringify(cxTools).slice(0, 120)}`);
+    return 'reader 选择 + 两种格式抽取 + 围栏块去短 + 工具文本抽取 均正常';
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -526,9 +538,20 @@ if (!skipScrub) {
 
 // ------------------------------------------------------------ L2 入口文件体检
 
-check('L2-1', 'run-sediment.sh 保留可执行位（否则 ./run-sediment.sh 报 Permission denied）', () => {
+check('L2-1', 'run-sediment.sh 的可执行位（POSIX 看文件模式；Windows 看 git 记录的模式）', () => {
   const p = join(SKILL_DIR, 'run-sediment.sh');
-  assert((statSync(p).mode & 0o111) !== 0, `${p} 没有可执行位`);
+  const rel = 'skills/obsidian-inbox/run-sediment.sh';
+  if (process.platform !== 'win32') {
+    assert((statSync(p).mode & 0o111) !== 0, `${p} 没有可执行位`);
+    return 'POSIX 文件模式含可执行位';
+  }
+  // NTFS 上 statSync 拿不到可执行位（永远 0），改看 git 索引里记的模式：分发出去的是 100755 才算保留
+  const r = spawnSync('git', ['-C', REPO_ROOT, 'ls-files', '-s', '--', rel], { encoding: 'utf8' });
+  if (r.error || r.status !== 0) return 'Windows 且拿不到 git 索引，跳过（Linux 上仍会校验文件模式）';
+  const mode = (String(r.stdout).trim().split(/\s+/)[0] || '').trim();
+  if (!mode) return 'Windows 且该文件未入 git 索引，跳过';
+  assert(mode === '100755', `git 索引里 ${rel} 的模式是 ${mode}，应为 100755（否则 Linux clone 后 ./run-sediment.sh 会 Permission denied）`);
+  return `git 索引模式 ${mode}（Windows 无 POSIX 位，按 git 记录判定）`;
 });
 
 check('L2-2', 'run-sediment.cmd 为 CRLF 行尾且纯 ASCII（GBK 代码页下不乱码、label/goto 可解析）', () => {
@@ -550,6 +573,13 @@ check('L2-3', '四个入口/脚本都能被语法解析', () => {
   for (const f of nodes) {
     const r = spawnSync(process.execPath, ['--check', join(SKILL_DIR, 'scripts', f)], { encoding: 'utf8' });
     assert(r.status === 0, `${f} 语法错误：${String(r.stderr).split('\n')[0]}`);
+  }
+  // .sh 语法检查需要可用的 bash：Windows 上通常没有（或只有会报 execvpe 的 WSL 中转），
+  // 拿不到 bash 时明确跳过并在输出里说明，而不是把环境问题报成语法错误。
+  const bashProbe = spawnSync('bash', ['--version'], { encoding: 'utf8' });
+  const bashUsable = !bashProbe.error && bashProbe.status === 0;
+  if (!bashUsable) {
+    return `${nodes.length} 个 .mjs 通过；本机没有可用的 bash，跳过 run-sediment.sh 语法检查（Linux 上会校验）`;
   }
   const sh = spawnSync('bash', ['-n', join(SKILL_DIR, 'run-sediment.sh')], { encoding: 'utf8' });
   assert(sh.status === 0, `run-sediment.sh 语法错误：${sh.stderr}`);

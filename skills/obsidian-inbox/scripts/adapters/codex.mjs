@@ -176,4 +176,29 @@ export const transcriptReader = {
     const s = parseFile(path, sid);
     return (s?.turns ?? []).map((t) => t.response).filter(Boolean);
   },
+  /**
+   * 工具调用参数 / 输出原文（`recover --from-tools` 用）——codex 的实质内容大多在这里：
+   * `function_call.arguments`、`custom_tool_call.input`、`*_output.output`（字符串或 input_text 块数组）。
+   */
+  readToolTexts(path) {
+    let raw;
+    try { raw = readFileSync(path, 'utf8'); } catch { return []; }
+    const out = [];
+    const push = (v) => {
+      const t = typeof v === 'string' ? v : textOf(v);
+      if (t && t.trim()) out.push(t);
+    };
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue;
+      let d;
+      try { d = JSON.parse(line); } catch { continue; }
+      if (d.type !== 'response_item') continue;
+      const p = d.payload ?? {};
+      if (p.type === 'function_call') push(p.arguments);
+      else if (p.type === 'custom_tool_call') push(p.input);
+      else if (p.type === 'function_call_output') push(p.output);
+      else if (p.type === 'custom_tool_call_output') push(p.output);
+    }
+    return out;
+  },
 };

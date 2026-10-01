@@ -6,11 +6,43 @@ AI-assisted development change history.
 > 说明：索引由 `dev-log index` 维护；条目编号/内容请勿手改。同号多条并列以 `#N×次数` 标注。
 
 ## 索引（脚本生成）
-- 跨平台: #3×8
-- 知识库: #2×30, #3×8
-- dev-log: #1×31
-- obsidian-inbox: #2×30, #3×8
-- skill 开发: #1×31, #2×30, #3×8
+- 多 agent 归档: #4
+- 跨平台: #3, #4
+- 隐私脱敏: #4
+- 知识库: #2, #3
+- dev-log: #1
+- obsidian-inbox: #2, #3, #4
+- skill 开发: #1, #2, #3, #4
+- Windows: #4
+
+---
+## Session #4 - 2026-10-01 17:34
+
+**需求**：
+把 obsidian-inbox 在 Windows 本机真正跑通（归档/提炼/recover 全链路），并清掉历史上进过公开仓库的本机标识与真实盈亏金额
+
+**主题**：
+obsidian-inbox, Windows, 跨平台, 多 agent 归档, 隐私脱敏, skill 开发
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/lib.mjs - 修改, frontmatter 反转义（修反斜杠翻倍）+ win32 路由大小写不敏感 + transcript reader 抽象（codeBlocksFromText/readZstdText/dshTranscriptReader，recover 支持 --from-tools/--max-block）`
+- `skills/obsidian-inbox/scripts/note.mjs - 修改, recover 按归档 source 选 reader（dsh/codex/workbuddy，--source 可覆盖）+ --from-tools 候选策略`
+- `skills/obsidian-inbox/scripts/sediment.mjs - 修改, Windows 下 dsh.cmd 不能直接 spawn（EINVAL）→ spawnDsh 走 cmd.exe`
+- `skills/obsidian-inbox/scripts/adapters/{contract,dsh,qoder,claude,codex,workbuddy}.mjs - 修改, cwdExcluded 共用（Windows 排除清单原先完全失效）+ dsh/codex/workbuddy 各自实现 transcriptReader（含 readToolTexts）`
+- `skills/obsidian-inbox/scripts/adapters/workbuddy.mjs - 重写, 正文改读本地 projects/*.jsonl（原实现只读 DB 元数据、永远 0 篇）+ 修 Python URI 拼接导致的静默查询失败`
+- `skills/obsidian-inbox/scripts/init.mjs - 修改, 排除清单补 Windows 状态目录`
+- `skills/obsidian-inbox/scripts/selftest.mjs - 修改, 动态 import 统一 pathToFileURL（修 5 条用例在 Windows 全挂）+ 新增 P2-3/P5-3 + L2-1/L2-3 平台感知`
+- `skills/obsidian-inbox/SKILL.md - 修改, 多 agent reader 数据源对照与 recover 边界说明`
+- `README.md + skills/football-analysis + skills/football-betting - 修改, 脱敏本机布局路径与真实盈亏金额（19 个文件，金额改定性描述）`
+- `skills/obsidian-inbox/private-lint.json - 新增（本机私有红线清单，已 gitignore 不入库）`
+
+**变更摘要**：
+本机是 Windows，原技能只在 POSIX 上验证过，跑归档时连撞四类必现问题，逐个定位并修：① dsh 只有 dsh.cmd，Node ≥18.20 起禁止直接 spawn 批处理 → EINVAL，整批归档失败，改为经 cmd.exe 传递单条命令行（POSIX 分支不变）；② excludeCwdPrefixes 在 Windows 完全失效（会话 cwd 是反斜杠、配置前缀已归一成斜杠，startsWith 永不匹配），导致 sediment 自己跑的 headless 会话被当用户会话扫进来，改为共享 cwdExcluded 并统一分隔符 + win32 大小写不敏感；③ parseFrontmatter 只剥引号不反转义，而 buildFrontmatter 用 JSON.stringify，markDistilled 每重写一次 frontmatter 就让 cwd 里的反斜杠翻一倍（本机 14 篇归档被写坏），改为按 YAML 反转义并加 P2-3 往返幂等用例；④ workbuddy adapter 只读 workbuddy.db 的 sessions 表（断言消息在云端），实测正文在 projects/<cwd编码>/<uuid>.jsonl，且 query() 把 file:C:\\… 拼进 Python 源码导致 \\U 被当转义 → 查询静默失败，改为 jsonl 提供正文、DB 补元数据。routeDir 在 win32 加 i 标志（小写盘符 cwd 原本整体掉进兜底目录，POSIX 保持大小写敏感）。把 recover 从写死 DSH transcript 改成按归档 source 选 reader（dsh zstd / codex rollout / workbuddy jsonl），并新增 --from-tools 覆盖「内容只在工具调用参数里」的两家；对 DSH 这种工具调用极多的会话加了 --max-block 上限与 dry-run 提示（实测同会话仅助手正文 6 块/836 字，加 --from-tools 变 668 块/327KB）。selftest 的动态 import 统一走 pathToFileURL，把 5 条在 Windows 全挂的用例修好；L2-1 在 Windows 改看 git 索引里的模式、L2-3 无 bash 时明确跳过，Windows 与 Linux 现在都 22/22。端到端在本机归档 72 篇会话（dsh 15 / codex 14 / workbuddy 43）并全部提炼成 34 篇主题笔记。另外应要求做了隐私脱敏：把历史里进过公开仓库的本机家目录路径、OS 用户名与真实盈亏金额替换为占位符/定性描述（filter-repo 改写全部本地引用，105→99 个提交），新增 private-lint.json（tokens + 正则，不入库）让 L1 扫到即 FAIL，并把该红线纳入分发校验。
+
+**遇到的问题**：
+- Windows 上 npm/工具类项目常见的坑集中爆发：spawn .cmd 的 EINVAL、路径分隔符与大小写、NTFS 没有 POSIX 可执行位、没有 bash；凡「只在一种平台上验证过」的脚本都该按 platform 分支写并留平台感知的回归用例。recover 的语义要写清：它只回补围栏代码块且默认只扫助手正文，codex/workbuddy 的实质内容在工具参数里（--from-tools 有用但对工具调用多的会话会爆炸，必须先 dry-run）。外部写 Obsidian 笔记 frontmatter 会被 Obsidian 元数据缓存回写（实测 domain 被改回旧值、引号被去掉），改完要复读确认。改历史只能靠 filter-repo + force push，旧对象在 GitHub 上仍可按 SHA 访问、fork/缓存也留副本；L1 的私有红线扫描在 Windows 上会因拿不到 git 文件列表而近乎空转，需在 Linux 或容器里复核。
+
+**commit**：b7e4c11
 
 ---
 ## Session #3 - 2026-09-29 16:35

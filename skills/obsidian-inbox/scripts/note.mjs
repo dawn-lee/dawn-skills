@@ -10,7 +10,7 @@
  *   node scripts/note.mjs show   --path "dawn/x.md" [--json]
  *   node scripts/note.mjs route  --cwd /abs/path [--json]
  *   node scripts/note.mjs distill --path "sessions/x.md" --into "[[主题笔记]]" [--note 说明] [--json]
- *   node scripts/note.mjs recover --session <会话id> --into "[[主题笔记]]" [--source dsh|codex|workbuddy] [--min-len 300] [--limit 20] [--dry-run] [--json]
+ *   node scripts/note.mjs recover --session <会话id> --into "[[主题笔记]]" [--source dsh|codex|workbuddy] [--from-tools] [--min-len 300] [--max-block 4000] [--limit 20] [--dry-run] [--json]
  *
  * 退出码：0 成功 / 2 用法错误 / 3 目标已存在（需 --append 或 --force） / 4 未找到
  */
@@ -301,7 +301,11 @@ function cmdRecover() {
     ? args.source.trim()
     : archiveSourceForSession(sid);
   const reader = transcriptReaderFor(source);
-  const blocks = transcriptCodeBlocks(sid, { minLen, reader });
+  // --from-tools：把工具调用参数/输出也当候选（codex / workbuddy 的实质内容大多在那里，
+  // 助手正文里几乎没有围栏块）；超过 --max-block（默认 4000 字）的整段跳过，避免灌进整个文件写入。
+  const fromTools = args['from-tools'] === true;
+  const maxBlock = Number(args['max-block']) > 0 ? Number(args['max-block']) : 4000;
+  const blocks = transcriptCodeBlocks(sid, { minLen, reader, includeToolTexts: fromTools, maxBlock });
   if (blocks === null) {
     fail(4, `找不到会话 ${sid} 的原始记录（transcript，按 ${reader?.agent ?? 'dsh'} 查找），无法回补`
       + `${source ? '' : '；该会话可能还没有归档，可用 --source <agent> 指定来源'}`);
@@ -312,10 +316,10 @@ function cmdRecover() {
     .slice(0, limit);
 
   if (!missing.length) {
-    const out = { ok: true, session: sid, target: hit, reader: reader?.agent, candidates: blocks.length, recovered: 0, dryRun: dryRun || undefined };
+    const out = { ok: true, session: sid, target: hit, reader: reader?.agent, fromTools: fromTools || undefined, candidates: blocks.length, recovered: 0, dryRun: dryRun || undefined };
     process.stdout.write(json
       ? `${JSON.stringify(out, null, 2)}\n`
-      : `无缺失代码块（来源 ${reader?.agent ?? 'dsh'}，原文 ${blocks.length} 块 ≥${minLen} 字，${hit} 已覆盖）\n`);
+      : `无缺失代码块（来源 ${reader?.agent ?? 'dsh'}${fromTools ? ' + 工具参数' : ''}，原文 ${blocks.length} 块 ≥${minLen} 字，${hit} 已覆盖）\n`);
     return;
   }
 
@@ -325,9 +329,9 @@ function cmdRecover() {
   try {
     if (!dryRun) {
       const body = [
-        `> 由 \`recover\` 从原始会话 \`${sid}\`（来源 ${reader?.agent ?? 'dsh'}）回补：这些代码块在归档时被截断/丢失。`,
+        `> 由 \`recover\` 从原始会话 \`${sid}\`（来源 ${reader?.agent ?? 'dsh'}${fromTools ? '，含工具调用参数/输出' : ''}）回补：这些片段在归档时被截断/丢失。`,
         '',
-        ...missing.flatMap((b, i) => [`### ${i + 1}. 代码块（${b.length} 字）`, '', '```', b, '```', '']),
+        ...missing.flatMap((b, i) => [`### ${i + 1}. 片段（${b.length} 字）`, '', '```', b, '```', '']),
       ].join('\n');
       appendSection(absPath, '代码块回补', body);
     }
@@ -336,12 +340,12 @@ function cmdRecover() {
   }
   const bytes = missing.reduce((n, b) => n + b.length, 0);
   const out = {
-    ok: true, session: sid, target: hit, reader: reader?.agent, candidates: blocks.length,
-    recovered: missing.length, bytes, dryRun: dryRun || undefined,
+    ok: true, session: sid, target: hit, reader: reader?.agent, fromTools: fromTools || undefined,
+    candidates: blocks.length, recovered: missing.length, bytes, dryRun: dryRun || undefined,
   };
   process.stdout.write(json
     ? `${JSON.stringify(out, null, 2)}\n`
-    : `${dryRun ? '[dry-run] ' : ''}${hit}：回补 ${missing.length}/${blocks.length} 个代码块（${bytes} 字，来源 ${reader?.agent ?? 'dsh'}）\n`);
+    : `${dryRun ? '[dry-run] ' : ''}${hit}：回补 ${missing.length}/${blocks.length} 个片段（${bytes} 字，来源 ${reader?.agent ?? 'dsh'}${fromTools ? ' + 工具参数' : ''}）\n`);
 }
 
 function cmdRoute() {

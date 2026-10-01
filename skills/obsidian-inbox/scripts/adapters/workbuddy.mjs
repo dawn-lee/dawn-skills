@@ -233,4 +233,25 @@ export const transcriptReader = {
     const s = parseTranscript(path, sid);
     return (s?.turns ?? []).map((t) => t.response).filter(Boolean);
   },
+  /**
+   * 工具调用参数 / 输出原文（`recover --from-tools` 用）——workbuddy 的脚本、配置改动大多在
+   * `function_call.arguments`（JSON 串）与 `function_call_result.output.text` 里，助手正文很少有围栏块。
+   */
+  readToolTexts(path) {
+    let raw;
+    try { raw = readFileSync(path, 'utf8'); } catch { return []; }
+    const out = [];
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue;
+      let d;
+      try { d = JSON.parse(line); } catch { continue; }
+      if (d.type === 'function_call') {
+        if (typeof d.arguments === 'string' && d.arguments.trim()) out.push(d.arguments);
+      } else if (d.type === 'function_call_result') {
+        const t = typeof d.output?.text === 'string' ? d.output.text : textOf(d.output);
+        if (t && t.trim()) out.push(t);
+      }
+    }
+    return out;
+  },
 };

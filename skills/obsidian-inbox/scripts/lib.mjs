@@ -740,9 +740,23 @@ export function codeBlocksFromText(text, minLen = 200) {
   return out;
 }
 
+/** 把 content blocks（Anthropic 风格 / input_text / output_text）拼成纯文本（lib 内部用，避免反向依赖 adapters）。 */
+function textFromBlocks(v) {
+  if (typeof v === 'string') return v;
+  if (!Array.isArray(v)) return '';
+  const parts = [];
+  for (const b of v) {
+    if (!b || typeof b !== 'object') continue;
+    if (typeof b.text === 'string' && /text$/.test(String(b.type ?? ''))) parts.push(b.text);
+  }
+  return parts.join('\n');
+}
+
 /**
  * DSH 的原始 transcript reader（默认实现，行为与旧版一致）：
  * `$DSH_HOME/sessions/<slug>/<sid>/*.jsonl.zstd` → 解压 → 取 `assistant/message` 的 text 块。
+ * `readToolTexts` 额外给出工具调用参数 / 工具输出原文（`tool/call` 的 arguments、`tool/result` 的 message），
+ * 供 `recover --from-tools` 使用：被归档裁掉的脚本、SQL、命令往往只存在于工具参数里。
  */
 export const dshTranscriptReader = {
   agent: 'dsh',
@@ -762,24 +776,53 @@ export const dshTranscriptReader = {
     }
     return out;
   },
+  readToolTexts(path) {
+    const raw = readZstdText(path);
+    if (raw === null) return [];
+    const out = [];
+    for (const line of raw.split('\n')) {
+      if (!line.trim()) continue;
+      let e;
+      try { e = JSON.parse(line); } catch { continue; }
+      if (e.type === 'tool/call') {
+        const a = e.data?.arguments;
+        if (typeof a === 'string' && a.trim()) out.push(a);
+      } else if (e.type === 'tool/result') {
+        const m = e.data?.message;
+        const t = textFromBlocks(m?.content) || (typeof m?.text === 'string' ? m.text : '');
+        if (t.trim()) out.push(t);
+      }
+    }
+    return out;
+  },
 };
 
 /**
  * 抽某会话原始 transcript 里助手**正文**（跳过 reasoning）的代码围栏块，按内容去重、长的在前。
  * `reader` 决定去哪家找记录（见 adapters/index.mjs 的 transcriptReaderFor）：不传 = DSH（向后兼容）。
+ * `includeToolTexts` 额外把工具调用参数/输出的原文也当候选（见 `recover --from-tools`），
+ * 其中超过 `maxBlock` 字的整段会跳过（避免把整个文件写入灌进笔记）。
  * 返回 null 表示"定位不到该会话的原始记录"，与"有记录但没代码块"的 [] 区分开。
  */
-export function transcriptCodeBlocks(sid, { minLen = 200, reader = null } = {}) {
+export function transcriptCodeBlocks(sid, { minLen = 200, reader = null, includeToolTexts = false, maxBlock = 4000 } = {}) {
   const r = reader ?? dshTranscriptReader;
   const tr = typeof r.findTranscriptPath === 'function' ? r.findTranscriptPath(sid) : null;
   if (!tr) return null;
   const blocks = [];
   const seen = new Set();
+  const push = (b) => {
+    if (!b || seen.has(b)) return;
+    seen.add(b);
+    blocks.push(b);
+  };
   for (const text of r.readAssistantTexts(tr) ?? []) {
-    for (const b of codeBlocksFromText(text, minLen)) {
-      if (seen.has(b)) continue;
-      seen.add(b);
-      blocks.push(b);
+    for (const b of codeBlocksFromText(text, minLen)) push(b);
+  }
+  if (includeToolTexts && typeof r.readToolTexts === 'function') {
+    for (const text of r.readToolTexts(tr) ?? []) {
+      for (const b of codeBlocksFromText(text, minLen)) push(b);   // 工具参数里的围栏块
+      const t = String(text ?? '').trim();
+      if (t.length >= minLen && t.length <= maxBlock) push(t);     // 工具参数/输出整段
     }
   }
   blocks.sort((a, b) => b.length - a.length);
