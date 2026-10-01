@@ -42,7 +42,7 @@ obsidian-inbox, Windows, 跨平台, 多 agent 归档, 隐私脱敏, skill 开发
 **遇到的问题**：
 - Windows 上 npm/工具类项目常见的坑集中爆发：spawn .cmd 的 EINVAL、路径分隔符与大小写、NTFS 没有 POSIX 可执行位、没有 bash；凡「只在一种平台上验证过」的脚本都该按 platform 分支写并留平台感知的回归用例。recover 的语义要写清：它只回补围栏代码块且默认只扫助手正文，codex/workbuddy 的实质内容在工具参数里（--from-tools 有用但对工具调用多的会话会爆炸，必须先 dry-run）。外部写 Obsidian 笔记 frontmatter 会被 Obsidian 元数据缓存回写（实测 domain 被改回旧值、引号被去掉），改完要复读确认。改历史只能靠 filter-repo + force push，旧对象在 GitHub 上仍可按 SHA 访问、fork/缓存也留副本；L1 的私有红线扫描在 Windows 上会因拿不到 git 文件列表而近乎空转，需在 Linux 或容器里复核。
 
-**commit**：b7e4c11
+**commit**：90d4b6e
 
 ---
 ## Session #3 - 2026-09-29 16:35
