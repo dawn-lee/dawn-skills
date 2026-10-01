@@ -1,5 +1,7 @@
 {
   "_note": "私有红线清单模板。复制为 private-lint.json（已 gitignore、不随仓库分发）即可让 selftest.mjs 也校验你的自有标识：tokens 是按字面匹配的词（正则元字符会自动转义），patterns 是正则串。",
   "tokens": ["example-internal-tool-name"],
-  "patterns": ["(?<![\\w-])acme(?![\\w-])"]
+  "patterns": ["(?<![\\w-])acme(?![\\w-])"],
+  "_historyAllow_note": "可选。L1 扫工作区当前内容，L3 另扫当前分支的**历史提交内容**（防「删了文件但旧提交仍能被 git show 读到」）。若某个词已发布在远端历史里、且你决定不改写历史，把它列到 historyAllow 即可让 L3 放行（结果里仍会报出条数）；新增泄漏不要加这里。",
+  "historyAllow": []
 }

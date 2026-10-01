@@ -425,6 +425,23 @@ check('P5-3', 'recover 按来源 agent 选 transcript reader，且围栏块抽�
   }
 });
 
+// ------------------------------------------------------------ P6 安装器状态
+
+check('P6-1', 'install --status：调度未注册时不计为失败（曾报假失败）', () => {
+  const r = spawnSync(process.execPath, [join(SKILL_DIR, 'scripts', 'install.mjs'), '--status', '--json'],
+    { encoding: 'utf8' });
+  if (!r.stdout) throw new Error(`--status 无输出：${String(r.stderr ?? '').slice(0, 150)}`);
+  let d;
+  try { d = JSON.parse(r.stdout); } catch { throw new Error(`--status 输出非 JSON：${r.stdout.slice(0, 120)}`); }
+  // 只断言调度相关步骤：调度"未注册"是正常状态（技能支持手动跑 run-sediment.sh），
+  // 不该计为失败；配置缺失等其它步骤的失败与本条无关。
+  const sched = (d.steps ?? []).filter((s) => s.kind === 'scheduler');
+  const bad = sched.filter((s) => !s.ok);
+  assert(bad.length === 0,
+    `调度步骤不应失败（未注册属正常）：${bad.map((b) => b.message).join(' | ') || '（无）'}`);
+  return sched.some((s) => /未注册/.test(s.message)) ? '未注册分支：0 失败步骤' : '已注册分支：0 失败步骤';
+});
+
 // ------------------------------------------------------------ L1 分发红线
 
 /**
@@ -503,10 +520,16 @@ function privateRules() {
   }
   const parts = [...(data.tokens ?? []).map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
     ...(data.patterns ?? [])];
-  if (!parts.length) return { path, count: 0, rules: [] };
+  const historyAllow = Array.isArray(data.historyAllow) ? data.historyAllow.map(String) : [];
+  if (!parts.length) return { path, count: 0, tokens: [], patterns: [], historyAllow, rules: [] };
   return {
     path,
     count: parts.length,
+    // 原始条目：L3 历史扫描需要逐条字面量（-S）与正则（-G），合并后的单一正则不够
+    tokens: data.tokens ?? [],
+    patterns: data.patterns ?? [],
+    // 已接受的历史命中（如远端已发布且决定不改写历史时）：L3 放行但不静默，仍会在结果里报出条数
+    historyAllow,
     rules: [{ id: 'private-tokens', re: new RegExp(parts.join('|')), why: `私有标识（清单：${path}）` }],
   };
 }
@@ -533,6 +556,39 @@ if (!skipScrub) {
     return `${distributableFiles().length} 个文件全部通过`
       + (priv?.count ? `；另扫私有清单 ${priv.count} 条（${priv.path.replace(REPO_ROOT + '/', '')}，不入库）`
         : '；未发现私有清单（如需校验自己的标识，见 private-lint.example.json）');
+  });
+
+  // L1 只扫**工作区当前内容**：把私有词删掉后，旧提交的 blob 仍能被 `git show <旧提交>` 读到
+  // （踩过两次：dev-log 条目里带词后用追加提交"修"，前一个提交的树里还留着）。L3 补这一段。
+  check('L3', '私有词历史扫描（当前分支的旧提交内容里也不许残留）', () => {
+    const priv = privateRules();
+    if (!priv || !priv.count) return '未配置私有清单（见 private-lint.example.json），跳过';
+    const probe = spawnSync('git', ['rev-parse', '--is-inside-work-tree'], { cwd: REPO_ROOT, encoding: 'utf8' });
+    if (probe.status !== 0) return '非 git 工作区（可能是复制安装），跳过';
+    const hits = [];
+    const allowed = [];
+    const allow = new Set(priv.historyAllow ?? []);
+    const scan = (flag, needle) => {
+      // 已显式接受的历史命中（historyAllow）：跳过但不静默，计入 allowed 让结果可见
+      if (allow.has(needle)) { allowed.push(needle); return; }
+      // -S 字面量 / -G 正则：命中即说明历史某提交的树内容涉及该词
+      const r = spawnSync('git',
+        ['log', 'HEAD', '--format=%h %s', flag, needle, '--', '.', ':(exclude)skills/obsidian-inbox/private-lint.json'],
+        { cwd: REPO_ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
+      // 老 git 不支持 pathspec 魔法/该 flag 时跳过，避免环境差异造成误报
+      if (r.status !== 0) return;
+      for (const line of String(r.stdout ?? '').split('\n').map((l) => l.trim()).filter(Boolean).slice(0, 3)) {
+        hits.push(`“${needle}”→ ${line}`);
+      }
+    };
+    for (const t of priv.tokens ?? []) scan('-S', t);
+    for (const p of priv.patterns ?? []) scan('-G', p);
+    assert(hits.length === 0,
+      `历史提交内容里发现 ${hits.length} 处私有词——只改工作区无效，旧提交仍可被 git show 读到。`
+      + `要么改写历史，要么把它加进 private-lint.json 的 historyAllow 显式接受：\n    ${hits.join('\n    ')}`);
+    const total = (priv.tokens?.length ?? 0) + (priv.patterns?.length ?? 0);
+    return `${total} 条规则，当前分支历史 0 命中`
+      + (allowed.length ? `；已按 historyAllow 接受 ${allowed.length} 条（历史里仍有，未改写）` : '');
   });
 }
 

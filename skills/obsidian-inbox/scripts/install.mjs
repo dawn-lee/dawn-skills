@@ -254,8 +254,16 @@ function uninstallSystemd() {
 
 function statusSystemd() {
   const { service, timer } = systemdPaths();
-  note('scheduler', `${service} ${existsSync(service) ? '存在' : '不存在'}`);
-  note('scheduler', `${timer} ${existsSync(timer) ? '存在' : '不存在'}`);
+  const svcExists = existsSync(service);
+  const tmrExists = existsSync(timer);
+  note('scheduler', `${service} ${svcExists ? '存在' : '不存在'}`);
+  note('scheduler', `${timer} ${tmrExists ? '存在' : '不存在'}`);
+  // 未注册定时任务属**正常状态**（技能支持手动跑 run-sediment.sh，或用户主动卸载过），
+  // 不该计为失败。文件在、systemctl 却报错才是真问题。
+  if (!svcExists && !tmrExists) {
+    note('scheduler', '定时归档未注册（正常：手动跑 run-sediment.sh，或执行 install.mjs 注册）');
+    return;
+  }
   const en = run('systemctl', ['--user', 'is-enabled', `${SYSTEMD_UNIT}.timer`]);
   note('scheduler', `is-enabled：${en.ok ? en.stdout : (en.error ?? '未安装')}`, en.ok);
   const ac = run('systemctl', ['--user', 'is-active', `${SYSTEMD_UNIT}.timer`]);
@@ -308,7 +316,13 @@ function uninstallLaunchd() {
 
 function statusLaunchd() {
   const plistPath = launchdPath();
-  note('scheduler', `${plistPath} ${existsSync(plistPath) ? '存在' : '不存在'}`);
+  const exists = existsSync(plistPath);
+  note('scheduler', `${plistPath} ${exists ? '存在' : '不存在'}`);
+  // 未注册属正常状态（可手动跑 run-sediment.sh），不计为失败
+  if (!exists) {
+    note('scheduler', '定时归档未注册（正常：手动跑 run-sediment.sh，或执行 install.mjs 注册）');
+    return;
+  }
   const res = run('launchctl', ['list', LABEL]);
   note('scheduler', res.ok ? `已加载：${res.stdout.split('\n').slice(0, 2).join(' / ')}` : '未加载', res.ok);
 }
@@ -341,7 +355,12 @@ function uninstallWindows() {
 
 function statusWindows() {
   const res = run('schtasks', ['/Query', '/TN', WIN_TASK]);
-  note('scheduler', res.ok ? '计划任务已注册' : '计划任务未注册', res.ok);
+  if (res.ok) {
+    note('scheduler', '计划任务已注册');
+    return;
+  }
+  // 未注册属正常状态（可手动跑 run-sediment.sh），不计为失败
+  note('scheduler', '计划任务未注册（正常：手动跑 run-sediment.sh，或执行 install.mjs 注册）');
 }
 
 // ---------------------------------------------------------------- 主流程
