@@ -45,6 +45,21 @@ obsidian-inbox, Windows, 跨平台, 多 agent 归档, 隐私脱敏, skill 开发
 **commit**：90d4b6e
 
 ---
+
+### （续）续记：install --status 假失败修复 + selftest 新增 L3 历史私有词扫描（并按用户决定不改写历史、以远端 main 为准追加）
+
+**改动文件**：
+- `skills/obsidian-inbox/scripts/install.mjs - 修改, 三平台 status 在调度未注册时不再计为失败`
+- `skills/obsidian-inbox/scripts/selftest.mjs - 修改, 新增 P6-1（status 假失败回归）与 L3（私有词历史扫描）、privateRules 暴露原始条目、新增 historyAllow 放行机制`
+- `skills/obsidian-inbox/private-lint.example.json - 修改, 补 historyAllow 说明`
+- `skills/obsidian-inbox/private-lint.json（不入库）- 修改, historyAllow 接受远端历史里已有的那条命中`
+
+**变更摘要**：
+两件事。①用户按需卸载每晚定时归档（改手动触发）后，install.mjs --status 报『完成，但有 2 步失败』——systemctl 对不存在的 unit 返回退出码 4 被计为失败；未注册本属正常状态（技能支持手动跑 run-sediment.sh），三平台 status 同步修：unit/plist/计划任务不存在时直接提示『未注册（正常…）』并返回，文件在却报错仍算真失败；临时注册/卸载各验一次确认两支都对，且未触发归档；新增 P6-1 只断言 kind=scheduler 的步骤（不受配置缺失等干扰），已验证回退即失败。②发现 L1 的盲区：它只扫工作区当前内容，把私有词从文件删掉就绿了，但旧提交的 blob 仍能被 git show 读到——本会话踩过两次（写 dev-log 条目时带进私有词，被 L1 拦下后用追加提交去改，前一个提交的树里还留着）。新增 L3：对当前分支逐条 git log -S（字面量）/ -G（正则），命中即失败并列出提交；只扫 HEAD（推送会发布的内容，不被远程跟踪引用干扰）；非 git 工作区或老 git 不支持 pathspec 魔法时跳过不误报；耗时 1.9s。配套加 historyAllow：远端历史已包含且决定不改写历史时，把词列进去即放行（结果里仍报出条数），新增泄漏照样失败——已验证清空 historyAllow 时 L3 能报出那 2 个历史提交。关于历史改写：曾用 filter-branch 改写 9 个提交清除该词，后按用户决定『以远端 main 为准、改动追加』放弃——已 git reset --hard 到远端 17d4d65（用户 8 个提交原样保留、SHA 不变），我的改动作为新提交 cdd5f0e 追加在其上，因此推送是 fast-forward 而非 force。selftest 22→24 项全过。
+
+**遇到的问题**：
+- 私有词的处置顺序应该是『修正那个提交』（amend/rebase/改写）或『显式接受并记录』，而不是追加一个『泛化』提交——追加只改工作区内容，旧 blob 仍可读；一旦推送就得再改写一次历史，且远端对象在 GitHub 上仍可按 SHA 访问。L1 只覆盖工作区是设计盲区，已由 L3 补上；注意 L3 依赖 git log -S/-G，在拿不到 git 列表的环境（如另一台机器记录的 Windows 场景）会跳过，需在 Linux/容器复核。多机协作下远端是权威：本地改写过的历史再推会与另一台机器的提交分叉，本次按用户决定直接以远端为基线重做改动（reset + 追加），避免又一轮 force push。另：查脚本用法不要拿 --help 试（sediment.mjs 无该参数，会把 --help 当普通参数真跑一次归档；本次误跑 0 笔记写入、只多 1 条 runs 留痕）。
+
 ## Session #3 - 2026-09-29 16:35
 
 **需求**：
